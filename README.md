@@ -1,4 +1,4 @@
-# Tetris Cybersecurity Education Platform - Documentation
+# Tetris Trojan
 
 ## Rwanda Coding Academy - Defending Rwanda Cyberspace 
 
