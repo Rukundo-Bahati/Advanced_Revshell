@@ -31,7 +31,7 @@ from pathlib import Path
 # ============================================
 
 # Attacker Configuration
-ATTACKER_IP = "192.168.1.102"  # Replace with your IP
+ATTACKER_IP = "192.168.8.101"  # Replace with your IP
 ATTACKER_PORT = 3333
 
 # Server Configuration for Dependencies
