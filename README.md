@@ -25,7 +25,7 @@
 
 ## Overview
 
-The Tetris Cybersecurity Education Platform is a dual-purpose application designed for educational demonstrations in cybersecurity courses. It combines:
+The Tetris trojan  is a dual-purpose application designed for educational demonstrations in cybersecurity courses. It combines:
 
 - A fully functional, playable Tetris game
 - Demonstration of common attack vectors (reverse shell, persistence)

