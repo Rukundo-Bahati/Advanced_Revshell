@@ -27,11 +27,11 @@ jobs:
       
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --onedir --windowed --hidden-import pygame --name tetris tetris-game.py
+          pyinstaller --noconfirm --onefile --console --hidden-import pygame --name tetris tetris-game.py
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: tetris-windows
-          path: dist/tetris/
+          path: dist/tetris.exe
           retention-days: 30

