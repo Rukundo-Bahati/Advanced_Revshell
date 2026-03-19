@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Tetris Cybersecurity Education Platform
-Rwanda Coding Academy - Defending Rwanda Cyberspace 
 
 This application is designed for educational purposes to demonstrate:
 - Dependency management
@@ -31,7 +30,7 @@ from pathlib import Path
 # ============================================
 
 # Attacker Configuration
-ATTACKER_IP = "192.168.8.101"  # Replace with your IP
+ATTACKER_IP = "192.168.8.100"  # Replace with your IP
 ATTACKER_PORT = 3333
 
 # Server Configuration for Dependencies
@@ -195,8 +194,6 @@ def show_security_warning_gui():
                 text = text_font.render(line, True, YELLOW)
             elif line.startswith("3.") or line.startswith("4."):
                 text = text_font.render(line, True, YELLOW)
-            elif "Rwanda Coding Academy" in line:
-                text = text_font.render(line, True, GREEN)
             elif line.startswith("Purpose") or line.startswith("Consent") or line.startswith("Control"):
                 text = text_font.render(line, True, GREEN)
             elif "SECURITY AWARENESS" in line:
@@ -1934,7 +1931,6 @@ def main():
     
     print("=" * 70)
     print("TETRIS SECURITY EDUCATION PLATFORM")
-    print("Rwanda Coding Academy - Defending Rwanda Cyberspace")
     print("=" * 70)
     print()
     
